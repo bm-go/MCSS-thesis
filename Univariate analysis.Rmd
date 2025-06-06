@@ -1,0 +1,836 @@
+---
+title: "Univariate analysis"
+author: "bmck"
+date: "2025-06-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose:
+
+This script will 
+
+First, run the data cleaning script over the ESS download. Run this first and link to your ESS file download. 
+
+```{r}
+### INSERT CODE TO RUN A DATA CLEANING SCRIPT THAT WILL BE KEPT SEPARATE
+```
+
+Load additional libraries:
+
+```{r}
+library(survey)
+library(srvyr)
+library(ggplot2)
+library(purrr)
+library(forcats)
+```
+
+## Understanding survey weights in ESS
+
+From the ESS Methodology Report:
+
+"For rounds 1-8, no PSU information is available. Users should be aware that not accounting for clustering may lead to underestimated standard errors."
+
+      For ESS Rounds 1-8 (no psu/stratum):
+      Use a pseudo-design acknowledging limitations:
+      
+      ess1_8_design <- svydesign(
+        ids = ~1, # No clustering info available
+        weights = ~anweight,
+        data = ess_data_round1_8
+      )
+
+Limited because: 
+  Clearly document this assumes SRS (simple random sampling).
+  Interpret SEs cautiously: they're underestimated.
+  Avoid bold claims about statistical significance.
+
+But we see we are missing the key vars, psu and stratum.
+
+To overcome this, we would need to integrate many country level datsets and calculate weights which is not feasible in the timeframes. 
+
+```{r}
+# Show missing weights data until R8
+ess_data |> group_by(essround) |> summarise(total_psu = sum(psu, na.rm = TRUE),
+                                            total_stratum = sum(stratum, na.rm=TRUE))
+
+```
+
+
+"From round 9 onwards, psu and stratum are included. Use these for proper variance estimation."
+
+For ESS Rounds 9-11 (with psu and stratum):
+    ess9_11_design <- svydesign(
+      ids = ~psu, 
+      strata = ~stratum, 
+      weights = ~anweight,
+      data = ess_data_round9_11
+    )
+
+So we create the 2 samples, then we can compare our SRS approach and the weighted approach from wave 9 onwards to check estimates. 
+```{r}
+    # create data subset first for r9, 10 and 11 modelling 
+ess_data_r9_r11 <- ess_data |> filter(essround %in% c(9,10,11))
+
+```
+
+
+
+# Create a survey design object(s)
+
+```{r}
+## complete, SRS model with primary sampling unit = 1 
+simple_design <- svydesign(ids = ~1 , 
+                           data = ess_data, 
+                           weights = ~anweight)
+
+# more detailed weighted model for w9-11
+complex_design_r9_r11 <- svydesign(ids = ~psu, 
+                        strata = ~stratum, 
+                        weights = ~anweight, 
+                        data = ess_data_r9_r11,
+                        nest = TRUE)
+
+```
+
+
+Now, calculate the mean values in two central trust variables to compare differences over time: 
+
+```{r}
+simple_summary_data <- svyby(
+  formula = ~trust_people,
+  by = ~cntry + essround,
+  design = simple_design,
+  FUN = svymean,
+  vartype = "ci", # To get confidence intervals
+  ci.level = 0.95 # 95% confidence interval
+)
+
+simple_summary_data <- svyby(
+  formula = ~trust_people,
+  by = ~cntry + essround,
+  design = simple_design,
+  FUN = svymean,
+  vartype = "se", 
+  ci.level = 0.95,
+  na.rm = TRUE,  # Remove NA observations
+  keep.var = TRUE,  # Keep variance estimates
+  keep.names = TRUE
+)
+
+simple_summary_data
+```
+
+```{r}
+library(srvyr)
+ess_data |> 
+  as_survey_design(ids = 1, weights = anweight) |> 
+  group_by(cntry, essround) |> 
+  summarise(mean_trust = survey_mean(trust_people),
+            se_trust = survey_mean(trust_people))
+
+ess_data |> 
+  as_survey_design(ids = 1, weights = anweight) |> 
+  filter(!is.na(trust_people)) %>%  # Pre-filter missing values
+  srvyr::group_by(cntry, essround) %>%
+  srvyr::summarize(
+    mean_trust = survey_mean(trust_people, na.rm = TRUE),
+    se = survey_mean(trust_people, vartype = "se")
+  )
+
+
+```
+
+
+### Now plot the UK trends
+
+```{r}
+
+```
+
+
+## Create trust variables for means
+
+Create function to plot trust variables: 
+
+
+```{r}
+
+summary_data <- svyby(
+  formula = ~response_variable,
+  by = ~time_period,
+  design = design_wt,
+  FUN = svymean,
+  vartype = "ci", # To get confidence intervals
+  ci.level = 0.95 # 95% confidence interval
+)
+
+```
+
+
+### Plot the individual trends 
+
+Create summary data:
+
+```{r}
+
+simple_summary_data <- svyby(
+  formula = ~trust_europ,
+  by = ~cntry + essround,
+  design = simple_design,
+  FUN = svymean,
+  vartype = "ci", # To get confidence intervals
+  ci.level = 0.95, # 95% confidence interval
+  na.rm = TRUE # Remove NA observations
+)
+
+```
+
+And plot the trend over time with error bars for each year:
+
+### Updated Code for Line Chart with Error Bars
+
+Here's the updated ggplot code for trust in people. 
+
+```{r}
+
+# Create the line chart with error bars, faceted by country
+ggplot(simple_summary_data, 
+       aes(x = factor(essround), y = trust_europ, group = 1)) +  # group=1 ensures lines connect across points
+  geom_line(color = "blue", size = 1) +  # Line for the trend
+  geom_point(color = "blue", size = 2) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  facet_wrap(~cntry, scales = "free_y") +  # Facet by country; use free_y for independent y-scales
+  labs(title = "Mean Trust in People Over Time by Country",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust in EU Parliament by country") +
+  theme_minimal() +  # Clean theme
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+    strip.text = element_text(size = 12, face = "bold")  # Bold facet labels
+  )
+```
+
+
+Trust in politics
+
+## Create averages for all years and countries with confidence intervals 
+
+Here we create a function to calculate the weighted average for all of the 
+
+```{r}
+
+# Get all variable names that start with "trust"
+trust_vars <- names(simple_design$variables)[grepl("^trust", names(simple_design$variables))]
+
+# create function to run the summary for each
+trust_summary_simple <- function(var) {
+  formula_str <- paste0("~", var)
+  
+  svyby(
+    formula = as.formula(formula_str),
+    by = ~cntry + essround,
+    design = simple_design,
+    FUN = svymean,
+    vartype = "ci",
+    ci.level = 0.95,
+    na.rm = TRUE
+  ) %>%
+    mutate(variable = var)  # Add variable name for identification/standardisation
+}
+
+# run mapdfr to get a df and loop the summary functions over each trust variable
+trust_summaries_df <- map_dfr(trust_vars, trust_summary_simple)
+print(trust_summaries_df)
+
+# now join all the trust_columns into one with pivot longer and tidy the df. 
+trust_summaries_df <- trust_summaries_df |>
+  select(-variable) |> # remove duplicated col
+  pivot_longer(
+    cols = starts_with("trust"),  
+    names_to = "trust_variable",       
+    values_to = "wt_avg_mean"    
+  ) |> 
+  drop_na() |>  # introduces many NA columns, so we remove for each 
+  select(essround, cntry, trust_variable, wt_avg_mean, ci_l, ci_u) #reorder data
+
+print(trust_summaries_df)
+```
+
+We now have a clean dataset with the average trust levels for each wave, adjusted for anweight, in each survey round, for each country. 
+
+We can see that trust in scientists was only available in 
+
+We check the distribution and availability of each variable:
+
+We see that trust in science wasonly asked in round 10. So we remove this. 
+Trust in political parties was not asked in Round 1. But we can impute this data as NA. 
+```{r}
+# check the missing values -> where the data == 0
+trust_summaries_df |> 
+  filter(wt_avg_mean == 0) |> 
+  group_by(trust_variable) |> 
+  summarise(total_missing = n(),
+            total_rounds = length(unique(essround)))
+
+# check the total valid responses by country per round
+trust_summaries_df |> 
+  group_by(essround, trust_variable) |> 
+  summarise(total_valid = sum(wt_avg_mean>0)) |> 
+  pivot_wider(names_from = trust_variable,
+              values_from = total_valid)
+
+
+# Remove trust in science and convert 0 to NA
+trust_summaries_df <- trust_summaries_df |> 
+  filter(trust_variable != "trust_scien") |> # remove science
+  mutate(across(where(is.numeric), ~na_if(., 0))) # convert to NA
+```
+
+
+### Now plot all UK trends first
+
+First create a data subset, this will be used later to compare vs other countries too 
+
+```{r}
+gb_trust_summaries <- trust_summaries_df |> filter(cntry == "GB")
+
+gb_trust_summaries |> mutate(diff = ci_u - wt_avg_mean)
+```
+
+
+And plot - all trends for UK: 
+
+```{r}
+# Create the line chart with error bars
+ggplot(gb_trust_summaries, 
+       aes(x = essround, y = wt_avg_mean, 
+           group = trust_variable, colour = trust_variable)) +  # group=1 ensures lines connect across points
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in UK by variable, ESS round 1-11",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (/10 with CI included)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = trust_variable, fill = trust_variable), 
+    color = "white",                # <--- CHANGE 1: Set text color inside labels to white
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 2,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(gb_trust_summaries$essround), max(gb_trust_summaries$essround)+3)) +
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  theme(legend.position = "none")
+
+
+
+```
+
+Facet for UK only to have each vriable separate 
+```{r}
+# And print faceted by country too
+ggplot(gb_trust_summaries, 
+       aes(x = factor(essround), y = wt_avg_mean, 
+           group = trust_variable, colour = trust_variable)) +  # group=1 ensures lines connect across points
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  facet_wrap(~trust_variable)+
+  labs(title = "Mean Trust in UK by variable, ESS round 1-11",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (/10 with CI included)") +
+  theme_minimal() + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+    legend.position = "none"
+  )+
+  geom_vline(xintercept = 7.5) # sample of brexit timing
+
+```
+
+### Remove trust in science (missing)
+
+As seen above, these are missing: 
+
+```{r}
+ess_data <- ess_data |> 
+  select(-trust_scien)
+```
+
+We keep R1 of political parties as we can't remove just the one variable. 
+
+## Investigating polarised values of trust
+
+Create variables for very high trust and very low trust, we will group as: 
+0,1,2,3: "Low trust"
+4,5,6: "Moderate trust 
+7,8,9,10: "High trust"
+
+With a second variable we recode as: 
+0,1: "Extreme low trust"
+9,10: "Extreme high trust"
+
+```{r}
+# proof of concept for function to classify high/low
+ess_data |> 
+  mutate(trust_hilow_people = factor(case_when(trust_people<4 ~ "Low",
+                                        between(trust_people, 4,6) ~ "Moderate",
+                                        between(trust_people, 7,10) ~ "High",
+                                        TRUE ~ NA),
+                                     levels = c("Low", "Moderate", "High", NA))) |> 
+  group_by(trust_hilow_people) |> count()
+
+# check why NA values included  
+ess_data |> 
+  mutate(trust_hilow_people = case_when(trust_people<4 ~ "Low",
+                                        between(trust_people, 4,6) ~ "Moderate",
+                                        between(trust_people, 7,10) ~ "High",
+                                        TRUE ~ NA)) |> 
+  select(essround, cntry, trust_people, trust_hilow_people) |> 
+  filter(is.na(trust_hilow_people))
+
+```
+
+We see that the NA's are true NA's so we can continue with our calculations: 
+
+```{r}
+#function to create high/low variables for each: 
+low_high_trust <- function(trust_var) {
+  factor(
+    case_when(
+      trust_var < 4 ~ "Low",
+      between(trust_var, 4, 6) ~ "Moderate",
+      between(trust_var, 7, 10) ~ "High", # use range to avoid any poorly coded 77/88/99 values being included
+      TRUE ~ NA #account for true NAs from no response
+  ),
+  levels = c("High","Moderate","Low",  NA))
+}
+
+# and function for extreme trust (top/bottom 2 values)
+extreme_trust <- function(trust_var) {
+  factor(
+    case_when(
+      trust_var < 2 ~ "Extreme low",
+      between(trust_var, 2, 8) ~ "Moderate",
+      between(trust_var, 9, 10) ~ "Extreme high",
+      TRUE ~ NA
+  ),
+  levels = c("Extreme high", "Moderate",  "Extreme low")
+  )
+}
+
+# now apply over our trust variables to get the trend in trust
+ess_data <- ess_data |> 
+  mutate(across(matches("^trust") & !matches("hilow|extreme"), low_high_trust, .names = "{.col}_hilow"),
+         across(matches("^trust") & !matches("hilow|extreme"), extreme_trust, .names = "{.col}_extreme")) 
+
+```
+
+Now calculate the unweighted rates within each country and wave 
+
+```{r}
+# subset the data
+gb_polarise_trust <- ess_data |> 
+  filter(cntry == "GB") |> 
+  select(essround, cntry, matches("_extreme|_hilow"))
+
+head(gb_polarise_trust)
+```
+
+Plot high and low trust views for UK in bars:
+
+```{r}
+# pivot longer for ggploting
+gb_polarise_trust |> 
+  select(essround, ends_with("hilow"), -matches("scien")) |> 
+  pivot_longer(cols = ends_with("hilow"), 
+               names_to = "trust_type", 
+               values_to = "trust_category") |> 
+  drop_na() |> # remove science and R1 parties
+    # then plot stacked bars
+  ggplot(aes(x = factor(essround), 
+             fill = trust_category)) + 
+  geom_bar(position = "fill") +  # stack 100%
+  scale_y_continuous(labels = scales::percent_format()) +  
+  scale_fill_manual(values = c("Low" = "red", "High" = "blue", "Moderate" = "NA")) + # custom colours to hide moderate
+  facet_wrap(~trust_type, ncol=4) +  # Separate plots
+  labs(title = "High and Low trends in trust vars (0-3 = Low; 7-10 = High)",
+       x= "ESS Round", y = "respondents %", fill = "Trust Level") +
+  theme_minimal()
+
+```
+
+And with the extreme trust levels (0-1 or 9-10):
+
+```{r}
+# pivot longer for ggploting
+gb_polarise_trust |> 
+  select(essround, ends_with("extreme"), -matches("scien")) |> 
+  pivot_longer(cols = ends_with("extreme"), 
+               names_to = "trust_type", 
+               values_to = "trust_category") |> 
+  drop_na() |> # remove science and R1 parties
+    # then plot stacked bars
+  ggplot(aes(x = factor(essround), 
+             fill = trust_category)) + 
+  geom_bar(position = "fill") +  # stack to 100%
+  scale_y_continuous(labels = scales::percent_format()) +  
+  scale_fill_manual(values = c("Extreme low" = "red", "Extreme high" = "blue", "Moderate" = "NA")) +  # custom colours to hide moderate
+  facet_wrap(~trust_type, ncol=4) +  # Separate plots 
+  labs(title = "Extreme trends in trust vars (0-1 = Low; 9-10 = High)",
+       x= "ESS Round", y = "respondents %", fill = "Trust Level") +
+  theme_minimal()
+```
+
+#### Comparing local and european parliament trust:
+
+```{r}
+# Create the line chart with error bars
+gb_trust_summaries |> 
+  filter(trust_variable %in% c("trust_europ", "trust_parliament")) |> 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = trust_variable, colour = trust_variable)) +  # group=1 ensures lines connect across points
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs European, ESS round 1-11",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (/10 with CI included)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = trust_variable, fill = trust_variable), 
+    color = "white",                # <--- CHANGE 1: Set text color inside labels to white
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 2,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(gb_trust_summaries$essround), max(gb_trust_summaries$essround)+3)) +
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  theme(legend.position = "none")
+
+
+```
+
+
+### International comparisons: 
+
+```{r}
+trust_summaries_df |> 
+  ggplot(aes(x=essround,
+             y=wt_avg_mean,
+             group=cntry,
+             colour = cntry))+
+  geom_line()+
+  # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(trust_summaries_df$essround), max(trust_summaries_df$essround)+1)) +
+  theme_minimal()+
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  labs(title = "Average trust in [...] - ESS rounds 4 to 11, UK only",
+     x = "ESS round", y = "Mean trust (0‒10)")+
+  theme(legend.position = "bottom")+
+  facet_wrap(~trust_variable)
+
+```
+
+
+#### Comparing individual countries
+
+Matching in ESS_trust_w678.Rmd. The section is just for visual inspections. 
+
+First, testing plots of just one country:
+
+Create plot to test parallel trends between UK and other country. We write a function to complete the plotting against multiple countries more easily. 
+
+```{r}
+## print sample for comparing by country. 
+trust_summaries_df |> 
+  filter(cntry %in% c("GB", "DE")) |> 
+  ggplot(aes(x = factor(essround), # Treat essround as a factor for discrete x-axis labels
+             y = wt_avg_mean,
+             group = cntry, # Group by country to draw lines for each country
+             colour = cntry)) +
+  geom_line(linewidth = 1) + # Added linewidth for better visibility
+  geom_point(size = 2) + # Add points for each data point
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  facet_wrap(~trust_variable) +
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+  labs(title = "Average trust in [...] - ESS Round 1-11, GB vs DE",
+   x = "ESS round", 
+   y = "Mean trust (0‒10)",
+   colour = "Country:")
+```
+
+
+Now make the function to plot GB vs other countries 
+```{r}
+# now create as function:
+plot_gb_other <- function(summary_stats= summary_stats, other_country){
+  summary_stats |> 
+    select(essround, cntry, 
+         people = ppltrst_mean, 
+         euro_parl = trstep_mean, 
+         legal_sys = trstlgl_mean,
+         police = trstplc_mean,
+         politicians = trstplt_mean,
+         parliament = trstprl_mean,
+         polit_parties = trstprt_mean,
+         united_nats = trstun_mean
+         ) |> 
+  pivot_longer(cols = people:united_nats) |> 
+  filter(cntry %in% c("GB", other_country),
+         essround %in% c(6,7)) |> 
+  ggplot(aes(x = factor(essround), # Treat essround as a factor for discrete x-axis labels
+             y = value,
+             group = cntry, # Group by country to draw lines for each country
+             colour = cntry)) +
+  geom_line(linewidth = 1) + # Added linewidth for better visibility
+  geom_point(size = 2) + # Add points for each data point
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  facet_wrap(~name, scales = "free_y") +
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+  labs(title = glue("Average trust in [...] - ESS Round 6-7 (baseline), GB vs {other_country}"),
+   x = "ESS round", 
+   y = "Mean trust (0‒10)",
+   colour = "Country:")
+}
+
+trust_summaries_df |> 
+  filter(cntry %in% c("GB", "DE")) |> 
+  ggplot(aes(x = factor(essround), # Treat essround as a factor for discrete x-axis labels
+             y = wt_avg_mean,
+             group = cntry, # Group by country to draw lines for each country
+             colour = cntry)) +
+  geom_line(linewidth = 1) + # Added linewidth for better visibility
+  geom_point(size = 2) + # Add points for each data point
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  facet_wrap(~trust_variable) +
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+  labs(title = "Average trust in [...] - ESS Round 1-11, GB vs DE",
+   x = "ESS round", 
+   y = "Mean trust (0‒10)",
+   colour = "Country:")
+
+
+# now create as function:
+plot_gb_other_parliament <- function(trust_summaries_df=trust_summaries_df, other_country){
+  trust_summaries_df |> 
+    filter(cntry %in% c("GB", other_country),
+           trust_variable %in% c("trust_europ", "trust_parliament")) |> 
+  ggplot(aes(x = factor(essround), # Treat essround as a factor for discrete x-axis labels
+             y = wt_avg_mean,
+             group = cntry, # Group by country to draw lines for each country
+             colour = cntry)) +
+  geom_line(linewidth = 1) + # Added linewidth for better visibility
+  geom_point(size = 2) + # Add points for each data point
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  facet_wrap(~trust_variable, scales = "free_y") +
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+  labs(title = glue("Average trust in EU and local Parliament - ESS Round 1-11, GB vs {other_country}"),
+   x = "ESS round", 
+   y = "Mean trust (0‒10)",
+   colour = "Country:")
+}
+
+plot_gb_other_parliament("DE")
+```
+
+Test plot:
+
+```{r}
+trust_summaries_df |> 
+  filter(trust_variable %in% c("trust_europ", "trust_parliament"),
+         cntry %in% c("GB", "DE")) |> 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = cntry, colour = cntry)) +  
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs European, ESS round 1-11",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (/10 with CI included)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 2,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(trust_summaries_df$essround), max(trust_summaries_df$essround)+3)) +
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  theme(legend.position = "none")+
+  facet_wrap(~trust_variable)
+
+
+```
+
+Now turn to function to compare other countries 
+
+```{r}
+plot_gb_other_parliament <- function(trust_summaries_df=trust_summaries_df, other_country){
+    
+  trust_summaries_df |> 
+      filter(trust_variable %in% c("trust_europ", "trust_parliament"),
+             cntry %in% c("GB", other_country)) |> 
+    ggplot(aes(x = essround, y = wt_avg_mean, 
+               group = cntry, colour = cntry)) +  
+      geom_line(size = 1) +  # Line for the trend
+      geom_point(size = 1.5) +  # Points for each mean
+      geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                    width = 0.5,  # Width of the error bar caps
+                    color = "gray") +  
+      labs(title =  glue("Average trust in EU and local Parliament - ESS Round 1-11, GB vs {other_country}"),
+           subtitle = "With 95% Confidence Intervals",
+           x = "ESS Round",
+           y = "Mean Trust") +
+      theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 2,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(trust_summaries_df$essround), max(trust_summaries_df$essround)+3)) +
+  geom_vline(xintercept = 7.5, color = "orange", size = 1.5, alpha = 0.5)+
+  theme(legend.position = "none")+
+  facet_wrap(~trust_variable)
+}
+
+```
+
+## Compare parliament outcomes for GB and individual countries:
+Here we can compare countries to look at comparability for parallel trends estimates. 
+
+Countries in the dataset: 
+
+```{r}
+ess_data |> group_by(cntry, country_name) |> count()
+
+```
+
+
+Germany (DE):
+
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "DE")
+et```
+
+Ireland (IE):
+
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "IE")
+
+```
+
+Belgium (BE):
+- doens't look feasible for parallel trends. 
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "BE")
+```
+
+Switzerland:
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "CH")
+```
+
+France:
+- Also doesn't look promising. Trust in local parliament is massively differnt in the lead up to brexit. 
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "FR")
+```
+
+
+Netherlands: 
+
+```{r}
+plot_gb_other_parliament(trust_summaries_df, "NL")
+
+```
+
+Scandi countries: 
+The trends appear too positive pre-Brexit ot be comaprable. 
+```{r}
+plot_gb_other_parliament(trust_summaries_df, c("FI", "NO", "SE"))
+
+```
+
+Remaining EU countries: 
+Not many promiising options here! 
+```{r}
+plot_gb_other_parliament(trust_summaries_df, c("CZ", "ES", "HU", "IL"))
+plot_gb_other_parliament(trust_summaries_df, c("PO", "PT", "SI", "EE", "LT"))
+```
+
+Germany appears the best to satisfy parallel trends for a comparison of data. 
+
