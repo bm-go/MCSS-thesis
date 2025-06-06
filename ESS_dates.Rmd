@@ -1,0 +1,304 @@
+---
+title: "ESS interview time checks"
+author: "bmck"
+date: "2025-05-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Purpose:
+
+This script is to check the date questions were asked for each country in the ESS to compare and see which fieldwork dates may work best for a cutoffpoint to use Brexit as an event for the Masters in a RDD or DiD:
+
+## Load libraries
+
+```{r}
+library(essurvey)
+library(haven)
+library(tidyverse)
+library(survey) # for setting svydesign 
+library(sjlabelled) # exploring labelled dhaven data
+library(tidyr)
+```
+
+Read in the data
+
+```{r}
+data_dates <- haven::read_sav(here("Data/ESS-interview_metadata/ESS_1705_metadata/ESS1e06_7-ESS2e03_6-ESS3e03_7-ESS4e04_6-ESS5e03_5-ESS6e02_6-ESS7e02_3-ESS8e02_3-ESS9e03_2-ESS10-ESS10SC-ESS11-subset.sav"))
+
+list.files("~/Documents/UC3M - Thesis/Data/ESS-interview_metadata/ESS_1705_metadata")
+```
+
+```{r}
+data_dates |> select(essround, cntry) |> 
+  count(essround, cntry) |> 
+  pivot_wider(names_from = essround,
+              values_from = n)
+data_dates |> 
+  select(essround, cntry) |> 
+  count(essround, cntry) |> 
+  ggplot()+
+  geom_line(aes(x=factor(essround), y=n, group=cntry, colour=cntry))
+
+```
+
+Now we standardise all of our data of interview data. Just do it for the UK first to test
+
+inwtm - Interview length in minutes, main questionnaire
+inwyys - Start of interview, year (w3 to w9)
+inwdd - Day of month of interview (w1 to w2)
+inwdds - Start of interview, day of month (w3 to w9)
+inwmm - Month of interview (w1-2)
+inwmms - Start of interview, month (w3-9)
+inwyr - Year of interview (w1 to 2)
+inwyye - End of interview, year (w3 to w9)
+inwds - Start of interview (w10-11)
+inwdde - End of interview, day of month (w3 to w9)
+inwmme - End of interview, month (w3 to w9)
+inwde - End of interview (w10 to 11)
+mode - Mode of data collection
+
+```{r}
+data_dates |> 
+  select(starts_with("in")) |> 
+  str()
+data_dates |> select(essround, cntry, starts_with("in")) |> 
+  group_by(essround) |> 
+  summarise(
+    n = n(), # Count observations in each group
+    # Use 'across' to apply the same functions to multiple columns
+    # .x refers to the current column being processed by across
+    across(c(inwtm:inwde),
+           list(n_valid = ~sum(!is.na(.x))),
+           .names = "{.col}_{.fn}" # Name the output columns clearly (e.g., ppltrst_mean)
+    )
+  )
+
+```
+
+We see that we already have POSIXct date information for waves 10 and 11:
+(inwds = start --> inwde = end)
+
+Now clean our data to have date information for each interview: 
+
+```{r}
+
+data_dates <- data_dates |> 
+  mutate(int_strt_day = case_when(essround %in% c(1,2) ~ inwdd,
+                                  between(essround, 3,9) ~ inwdds,
+                                  essround %in% c(10,11) ~ as.numeric(day(inwds))),
+         # start month
+         int_strt_mnth = case_when(essround %in% c(1,2) ~ inwmm,
+                                  between(essround, 3,9) ~ inwmms,
+                                  essround %in% c(10,11) ~ as.numeric(month(inwds))),
+         # start year
+         int_strt_year = case_when(essround %in% c(1,2) ~ inwyr,
+                                  between(essround, 3,9) ~ inwyys,
+                                  essround %in% c(10,11) ~ as.numeric(year(inwds))),
+         
+         # end month
+         int_end_mnth = case_when(essround %in% c(1,2) ~ inwmm,
+                                  between(essround, 3,9) ~ inwmme,
+                                  essround %in% c(10,11) ~ as.numeric(month(inwde))),
+
+         # end year
+         int_end_year = case_when(essround %in% c(1,2) ~ inwyr,
+                                  between(essround, 3,9) ~ inwyye,
+                                  essround %in% c(10,11) ~ as.numeric(year(inwde)))
+         )
+
+data_dates |> 
+  filter(essround >9) |> 
+  select(inwds, inwde) |> 
+  mutate(equal = ifelse(inwds == inwde, 1,0)) |> 
+  count(equal)
+
+# check the data available
+data_dates |> 
+  select(essround, starts_with("int_")) |> 
+  group_by(essround) |>   
+  summarise(
+    n = n(), # Count observations in each group
+    # Use 'across' to apply the same functions to multiple columns
+    # .x refers to the current column being processed by across
+    across(c(int_strt_day:int_end_year),
+           list(n_valid = ~sum(!is.na(.x))),
+           .names = "{.col}_{.fn}" # Name the output columns clearly (e.g., ppltrst_mean)
+    )
+  )
+
+# print the actual response dates per country for valid responses
+data_dates |> 
+  select(essround, cntry, inwds) |> 
+  filter(!is.na(inwds)) |> 
+  mutate(month = as.numeric(month(inwds)))
+```
+
+
+```{r}
+
+# join end date?
+data_dates <- data_dates |> 
+  mutate(
+    # joined end date
+    start_date = case_when(between(essround, 1, 9) & 
+                             !is.na(int_strt_day) & 
+                             !is.na(int_strt_mnth) & 
+                             !is.na(int_strt_year) ~
+        make_date(year = int_strt_year, month = int_strt_mnth, day = int_strt_day),
+      between(essround, 10, 11) ~ inwds,
+      TRUE ~ as.Date(NA)),
+    
+    # create end date -> use start day because end day doesn't exist.
+    end_date = case_when(
+      between(essround, 1, 9) & !is.na(int_strt_day) & !is.na(int_end_mnth) & !is.na(int_end_year) ~
+        make_date(year = int_end_year, month = int_end_mnth, day = int_strt_day),
+      between(essround, 10, 11) ~ inwde),
+    start_date_posix = as.POSIXct(start_date),
+  )
+
+
+
+```
+
+Check distribution of intereviews in UK over time
+
+```{r}
+plot_responses_uk <- data_dates |>
+  filter(cntry == "GB") |>
+  select(essround, start_date, end_date) |> # Select only the date columns
+  pivot_longer(
+    cols = c(start_date, end_date),
+    names_to = "date_type",
+    values_to = "date") |>
+  filter(!is.na(date)) |>
+  mutate(date = as.Date(date)) |> # Ensure 'date' is a Date object for counting
+  count(essround, date, date_type, name = "count")
+
+# Create the plot
+ggplot(plot_responses_uk, 
+       aes(x = date, y = count, color = date_type)) +
+  geom_col() +
+  labs(
+    title = "Count of UK Observations Over Time",
+    x = "Date",
+    y = "Count",
+    color = "Date Type"
+  ) +
+  scale_color_manual(
+    labels = c("End Date", "Start Date"),
+    values = c("blue", "red")
+  ) +
+  theme_minimal()
+
+  
+```
+
+Plot for each wave to see more detailed:
+
+```{r}
+# Create the plot
+ggplot(plot_responses_uk, 
+       aes(x = date, y = count, color = date_type)) +
+  geom_col() +
+  labs(
+    title = "Count of UK Observations Over Time",
+    x = "Date",
+    y = "Count",
+    color = "Date Type"
+  ) +
+  scale_color_manual(
+    labels = c("End Date", "Start Date"),
+    values = c("blue", "red")
+  ) +
+  theme_minimal()+
+  facet_wrap(~essround,
+             scales = "free_x")
+
+# Create the plot
+ggplot(plot_responses_uk, 
+       aes(x = date, y = count, color = date_type)) +
+  geom_col() +
+  labs(
+    title = "Count of UK Observations Over Time",
+    x = "Date",
+    y = "Count",
+    color = "Date Type"
+  ) +
+  scale_color_manual(
+    labels = c("End Date", "Start Date"),
+    values = c("blue", "red")
+  ) +
+  theme_minimal()+
+  scale_x_date(limits = c(as.Date("2014-08-15"), as.Date("2014-11-01")))+
+  geom_vline(xintercept = as.Date("2016-06-23"))
+
+```
+
+
+```{r}
+plot_responses_uk |> 
+  ggplot(aes(x = date, y = count, color = date_type)) +
+  geom_col() +
+  labs(
+    title = "Count of UK Observations Over Time",
+    x = "Date",
+    y = "Count",
+    color = "Date Type"
+  ) +
+  scale_color_manual(
+    labels = c("End Date", "Start Date"),
+    values = c("blue", "red")
+  ) +
+  theme_minimal()+
+  facet_wrap(~essround,
+             scales = "free_x")
+```
+
+
+check responses with no NA but yes NA for other date
+```{r}
+data |> 
+  mutate(count_start_yes = ifelse(!is.na(start_date) & is.na(end_date), 1,0),
+         count_end_yes = ifelse(is.na(start_date) & !is.na(end_date), 1,0)) |> 
+  summarise(yes_only = sum(count_start_yes),
+            no_only = sum(count_end_yes))
+```
+
+
+
+PLot all countries:
+
+```{r}
+data |>
+#  filter(cntry == "GB") |>
+  select(essround, start_date, end_date) |> # Select only the date columns
+  pivot_longer(
+    cols = c(start_date, end_date),
+    names_to = "date_type",
+    values_to = "date") |>
+  filter(!is.na(date)) |>
+  mutate(date = as.Date(date)) |> # Ensure 'date' is a Date object for counting
+  count(essround, date, date_type, name = "count") |> 
+  ggplot(aes(x = date, y = count, color = date_type)) +
+  geom_col() +
+  labs(
+    title = "Distribution of all responses to ESS, June 2014 to June 2017",
+    x = "Date",
+    y = "Count",
+    color = "Date Type"
+  ) +
+  scale_color_manual(
+    labels = c("End Date", "Start Date"),
+    values = c("blue", "red")
+  ) +
+  theme_minimal()+
+  scale_x_date(limits = c(as.Date("2014-06-01"), as.Date("2017-06-01")))+
+  geom_vline(xintercept = as.Date("2016-06-23"))
+
+```
+
