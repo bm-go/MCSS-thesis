@@ -700,6 +700,11 @@ plot_gb_other_parliament <- function(trust_summaries_df=trust_summaries_df, othe
 plot_gb_other_parliament(trust_summaries_df, "DE")
 ```
 
+```{r}
+
+```
+
+
 Test plot:
 
 ```{r}
@@ -742,7 +747,130 @@ ggplot(aes(x = essround, y = wt_avg_mean,
   facet_wrap(~trust_variable)
 
 
+
 ```
+
+### Parallel trends plot UK vs Germany
+
+```{r}
+### plotting just the pre-Referendum periods 
+trust_summaries_df |> 
+  # limit data 
+  filter(trust_variable == "trust_europ",
+         cntry %in% c("GB", "DE"),
+         essround <9) |> 
+  #clean names for plotting
+  mutate(cntry = ifelse(cntry == "GB", "UK", "Germany"),
+         trust_variable = ifelse(trust_variable == "trust_europ", "Trust in European Parliament", trust_variable)) |> 
+  # plot 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = cntry, colour = cntry)) +  
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs Germany, ESS round 1-8",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (weighted)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 0.75,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,8,1),
+                     limits = c(min(trust_summaries_df$essround),9)) +
+  # add referendum line
+  geom_vline(xintercept = 7.7, color = "orange", size = 1.5, alpha = 0.5)+
+  annotate(geom="text", x = 7.4, y =4.5, label = "Referendum",
+             angle = 90, color = "orange")+
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank(), # Remove vertical grid lines 
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank()
+  )
+```
+
+### UK vs Germany with standardised values to R1
+```{r}
+### plotting just the pre-Referendum periods 
+trust_summaries_df |> 
+  # limit data 
+  filter(trust_variable == "trust_europ",
+         cntry %in% c("GB", "DE"),
+         essround <9) |> 
+  #clean names for plotting
+  mutate(cntry = ifelse(cntry == "GB", "UK", "Germany"),
+         trust_variable = ifelse(trust_variable == "trust_europ", "Trust in European Parliament", trust_variable)) |> 
+  group_by(cntry) |> 
+  
+# now standardise the values to R1 
+    mutate(R1_baseline = wt_avg_mean[essround == 1],
+           wt_avg_mean = wt_avg_mean - R1_baseline,
+           ci_l = ci_l - R1_baseline,
+           ci_u = ci_u - R1_baseline) |> 
+  ungroup() |> 
+  
+# plot 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = cntry, colour = cntry)) +  
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs Germany, ESS round 1-8",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (weighted)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 0.75,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,8,1),
+                     limits = c(min(trust_summaries_df$essround),9)) +
+  # add referendum line
+  geom_vline(xintercept = 7.7, color = "orange", size = 1.5, alpha = 0.5)+
+  annotate(geom="text", x = 7.4, y =0, label = "Referendum",
+             angle = 90, color = "orange")+
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank(), # Remove vertical grid lines 
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank()
+  )
+```
+
+
+### Other country comparisons 
+
 
 Now turn to function to compare other countries 
 
