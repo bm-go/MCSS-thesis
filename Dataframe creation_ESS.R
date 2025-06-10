@@ -1,21 +1,8 @@
----
-title: "Dataframe creation"
-author: "Bradley McKenzie"
-date: "2025-06-02"
-output: html_document
----
-
-```{r setup, include=FALSE}
+## ----setup, include=FALSE---------------------------------------------------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE)
-```
 
-## Purpose
 
-This workbook will read in the ESS data, filter the relevant variables and create a base survey design object that we can use in our analysis. The ESS file I have downloaded is from the ESS DataWizard: https://ess.sikt.no/en/?tab=overview
-
-## Read in libraries
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 library(haven)
 library(tidyverse)
 library(here)
@@ -27,13 +14,9 @@ library(glue)
 # to prevent any tidy package issues
 conflict_prefer("filter", "dplyr")
 conflict_prefer("select", "dplyr")
-```
 
-### Read complete dataset
 
-Read the dataset (my one has most repeated variables for waves 1 to 11) for all available countries
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 #ess_data <- haven::read_sav(here("Data/ESS_3.0_june_update/ESS_datafile_3.0.sav"))
 ess_data <- haven::read_sav(here("Data/ESS_3.0_update/ESS_update_june2025.sav"))
 
@@ -41,14 +24,9 @@ ess_data <- haven::read_sav(here("Data/ESS_3.0_update/ESS_update_june2025.sav"))
 glue("We have an ESS dataset with {nrow(ess_data)} rows and {ncol(ess_data)} variables.\n
      Data is spread over {length(unique(ess_data$essround))} rounds of the survey, from rounds {min(ess_data$essround)} to {max(ess_data$essround)}.")
 
-```
 
 
-#### Filter variables
-
-Create summary data with our IDs, weights, demographics, trust variables and other attitudinal information. 
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 # first summarise all data and extract variables
 ess_data <- ess_data |> 
   select(
@@ -145,28 +123,18 @@ ess_data <- ess_data |>
                                     destination = "country.name"
                                     ), .after = cntry)
 
-```
 
-Some variables ESS does not have that would be helpful include social class and mental health scores. 
 
-### show descriptives on responses of the data:
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 ess_data |> 
   group_by(essround, cntry) |> 
   count() |> 
   pivot_wider(names_from = cntry, 
               values_from = n)
 
-```
 
-### Impute missing analysis weight variable
 
-### Create survey object to include weights
-
-First, we must manually create our analysis weight for rounds 2 and 3. These are missing from the information, but guidance on how to make these is given in the manual:
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 # we see the analysis weight is not available in all rounds
 ess_data |> group_by(essround) |> summarise(total_wts = sum(anweight))
 
@@ -183,32 +151,21 @@ ess_data |>
   summarise(diffs = sum(diff_wt),
             total_resp = length(essround),
             prop_diff_wts = glue("{round(diffs/total_resp*100,4)}%"))
-```
 
-We see that the weights are almost identical manually calculated, this could just be a rounding error in each. The total difference is negligable, with wave 7 having the most different at 4dp rounding with 57 of the 30k+ responses different. Negligable.  
 
-### Manually calculate anweight value for rounds 2 and 3
-
-Check distribution
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 ess_data |> 
   mutate(anweight = ifelse(essround %in% c(2,3), anweight2/10000, anweight)) |> 
   group_by(essround) |> summarise(total_wts = sum(anweight))
-```
 
-And impute, removing additional var:
-```{r}
+
+## ---------------------------------------------------------------------------------------------------------------------
 ess_data <- ess_data |> 
   mutate(anweight = ifelse(essround %in% c(2,3), anweight2/10000, anweight)) |> 
   select(-anweight2)
-```
 
 
-## Check response numbers by country and round:
-
-####  (i) Responses  by country: 
-
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 
 # Calculate grouped stats by round
 data_by_country <- ess_data %>%
@@ -229,11 +186,9 @@ for (i in 1:nrow(data_by_country)) {
   cat("\n")  #blank line
 }
 rm(current_group)
-```
 
-##### (ii) Responses by ESS round: 
 
-```{r}
+## ---------------------------------------------------------------------------------------------------------------------
 # Calculate grouped stats by round
 data_by_round <- ess_data %>%
   group_by(essround) %>%
@@ -254,6 +209,4 @@ for (i in 1:nrow(data_by_round)) {
 }
 
 rm(current_group)
-```
-
 
