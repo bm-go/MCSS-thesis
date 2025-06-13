@@ -1,0 +1,1031 @@
+---
+title: "Bivariate analysis"
+author: "bmck"
+date: "2025-06-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+
+This code will do exploratory analysis between the variables related to trust and other demographic factors: 
+
+The workflow is: 
+  - Call summarised dataset
+  - Analyse data availability and correlations to select key variables. 
+  - Select final demographic variables:
+  - Clean these variables for modelling. 
+  
+
+The focus of the paper are trust in European Parliament and the relationship to trust in local Parliament. So these 2 variables are presented for multivariate analysis. The others are not included. 
+
+## Call necessary data files
+
+The following will call the data file from "Univariate analysis.Rmd" file. This also calls the "Dataframe creation_ESS.Rmd" file within it so takes a while. The main useful outputs are: 
+
+- ess_data -> Our original dataset with some minor cleaning and additional variables for high/low trust included. 
+
+```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+#knitr::purl("Dataframe creation_ESS.Rmd", output = "temp_data_prep.R")
+knitr::purl("Univariate analysis.Rmd", output = "temp_data_prep2.R")
+source("temp_data_prep2.R")
+file.remove("temp_data_prep2.R")
+
+# clean our R environment from the extra files. 
+rm(ess_data_r9_r11,
+   complex_design_r9_r11,
+   data_by_country,
+   data_by_round,
+   i,
+   report,
+   trust_vars_hilow,
+   trust_vars,
+   plot_gb_other,
+   plot_gb_other_parliament,
+   trust_summary_simple,
+   trust_summary_hilow_simple,
+   complex_summary_data,
+   gb_polarise_trust,
+   simple_design_polarise,
+   trust_hilow_summaries_df,
+   trust_hilow_summaries_df2
+   )
+```
+
+
+### Libraries
+
+```{r}
+library(DataExplorer)
+library(survey)
+library(purrr)
+library(dplyr)
+library(corrplot)
+library(stargazer)
+```
+
+## Data cleaning
+
+### Check for low response rates to remove initial variables 
+
+Use GB only to check for variables to remove. This is our focus anyway. 
+
+We also look to focus on variables after R5 as this will be our focus for the modelling. 
+
+Check sociodemographic variables:
+
+```{r}
+gb_data_cleaning <- ess_data |> 
+  filter(cntry == "GB",
+         essround > 5)
+# check overall missing 
+gb_data_cleaning |> plot_missing()
+
+# select all variables with over 50% missing values
+missing50plus <- gb_data_cleaning |> 
+  select(where(~ mean(is.na(.)) * 100 > 50)) |> 
+  names()
+
+print(missing50plus)
+
+# make sure we don't remove weights
+missing50plus <- missing50plus[!(missing50plus %in% c("psu", "stratum"))]
+
+## remove these values from main and cleaning data:
+gb_data_cleaning <- gb_data_cleaning |> 
+  select(-missing50plus)
+ess_data <- ess_data |>
+  select(-missing50plus)
+```
+We have lost mostly variables about political party alignment (these were only asked in R7 and R8) + whether the individual feels aligned to the main ethnic group in the country. We have comparable political and ethnicity vairables that will be fine. 
+
+Check for more detailed analysis for the DiD. Remove variables with high missing values in our key waves. 
+
+```{r}
+## check for missing in key rounds of data with DiD
+gb_data_cleaning |> 
+  select(-psu, -stratum) |> 
+  filter(essround %in% c(6,7,8)) |> 
+  plot_missing()
+
+
+gb_data_cleaning |> 
+  filter(essround %in% c(6,7,8)) |> 
+  select(where(~ mean(is.na(.)) * 100 > 50)) |> 
+  names()
+```
+
+We do not remove these variables as many are available from R8. So they will not be included in the DiD but may be useful for the regression and identifying trends. 
+
+#### Political variables 
+
+```{r}
+## check overall response rates
+ess_data |> 
+  filter(cntry == "GB") |> 
+  select(any_of(
+    c("vote", # Voted last national election (Yes/No)
+    "prtvtbgb",  # Party voted for in last national election
+    "prtclbgb",  # Which party feel closer to, United Kingdom
+    "prtdgcl",  # How close does the repondent feel to the party party from 'prtclbgb'
+    "lrscale", # left right political scale 
+    "polintr" # level of political interest
+    ))) |> 
+  plot_missing()
+
+
+```
+
+We retain political interest, voted in last election and left right scale. 
+
+```{r}
+# specify our remaining political variables for calling later:
+polit_vars <- c("vote", "lrscale", "polintr")
+```
+
+Check multicollinearity
+
+We see these are all valid. Voting is more correlated with voting. 
+
+```{r}
+cor_matrix <- cor(ess_data |> 
+                  select(polit_vars),
+                  use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+```
+
+### income and education
+
+```{r}
+# identify vars
+inc_edu_vars <- c(
+  "eisced",  # Highest level of education of respondent
+    "pdwrk",  # In paid work
+    "hinctnta", # Household's total net income, all sources (reported in deciles)
+    "hincfel") # Feeling about household's income nowadays - financial stress
+
+
+# plot correlations:
+cor_matrix <- cor(gb_data_cleaning |> 
+                  select(inc_edu_vars),
+                  use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+gb_data_cleaning |> 
+  select(inc_edu_vars) |> 
+  plot_histogram()
+```
+
+We decide to keep one education variable and income + income stress. 
+Financial gives us a more broad relative measure of financial ability. 
+We will regroup these variables later and clean. We see that education-eisced has missing values. 
+
+```{r}
+inc_edu_vars <- c(
+  "eisced",  # Highest level of education of respondent
+  "hinctnta", # Household's total net income, all sources (reported in deciles)
+  "hincfel") # Feeling about household's income nowadays - financial stress
+```
+
+#### Satisfaction variables
+
+Set the variables, plot missing and distribution. 
+
+```{r}
+satis_vars <- c(
+    # satisfaction with life and country
+    "stflife", # How satisfied with life as a whole
+    "stfdem", # How satisfied with the way democracy works in country
+    "stfeco", # How satisfied with present state of economy in country
+    "stfgov", # How satisfied with the national government
+    "stfedu", # State of education in country nowadays
+    "stfhlth" # State of health services in country nowadays
+)
+
+cor_matrix <- cor(gb_data_cleaning |> 
+                  select(satis_vars),
+                  use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+
+ess_data |> filter(cntry == "GB") |> select(satis_vars) |> plot_histogram()
+```
+All variables have some validaity but are highly correlated.
+We use the satisfaction life and satisfaction with the economy variables as the literature indicates these were related to Brexit vote.
+
+```{r}
+satis_vars <- c(
+    # satisfaction with life and economy
+    "stflife", # How satisfied with life as a whole
+    "stfeco" # How satisfied with present state of economy in country
+)
+
+```
+
+
+
+## Immigration variables:
+
+```{r}
+immig_vars <- c(
+    "imsmetn",  #Allow many/few immigrants of same race/ethnic group as majority
+    "imdfetn",  #Allow many/few immigrants of different race/ethnic group from majority
+    "impcntr",  #Allow many/few immigrants from poorer countries outside Europe
+    "imbgeco",  #Immigration bad or good for country's economy
+    "imueclt",  #Country's cultural life undermined or enriched by immigrants
+    "imwbcnt")  #Immigrants make country worse or better place to live
+
+cor_matrix <- cor(gb_data_cleaning |> 
+                  filter(cntry == "GB") |> 
+                  select(immig_vars),
+                  use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+gb_data_cleaning |> select(immig_vars) |> plot_missing()
+ess_data |> filter(cntry == "GB") |> select(immig_vars) |> plot_histogram()
+
+# plot just overall attitudes. We see they have increased overall (unweighted data)
+ess_data |> 
+  group_by(essround) |> 
+  summarise(avg_immig_att = mean(imwbcnt, na.rm = TRUE)) |> 
+  ggplot()+
+  geom_line(aes(x=essround, y=avg_immig_att))
+
+```
+
+Quite high correlations, we see that there are many 5/10 responses here. Large modal value. This is likely people not wanting to appear racist. 
+We will continue with "imwbcnt" - Immigrants make country worse or better place to live. 
+We will group this as yes, no, moderate but not focus on extremes. This will be hard to exploit as many people appear to be hiding their true value.  
+
+```{r}
+immig_vars <- "imwbcnt"
+```
+
+
+### Reduce dataset 
+
+```{r}
+names(ess_data)
+```
+
+
+### Select our final demographic variables to calculate conditional means. 
+
+```{r}
+
+# choose variables for demographics:
+demog_vars <- c(        
+  ## ID and weights
+    "essround",
+    "cntry",
+    "anweight",
+
+    # trust variables (local and EU parliament only)
+    "trust_europ",
+    "trust_parliament",
+
+    # some demographic variables
+    "gndr",  # Gender
+    "agea",  # Calculated age of respondent
+    "hlthhmp", # Hampered in daily activities by illness/disability/infirmity/mental problem
+    "hhmmb", # number of hh members
+
+      # income + education
+    "eisced",  # Highest level of education of respondent
+    "hinctnta", # Household's total net income, all sources (reported in deciles)
+    "hincfel", # Feeling about household's income nowadays - financial stress
+        
+        # citizenship/ethnicity
+    "blgetmg", # Belong to minority ethnic group in country
+        # location
+    "domicil", # type of area 5pt scale - A big city, Suburbs or outskirts, town or small city, village, countryside
+    "region", # region (not for model but maybe if maps made.)
+        # health 
+    "hlthhmp", # Hampered in daily activities by illness/disability/infirmity/mental problem
+
+
+    # political identifiers
+    "lrscale", # left right political scale 
+    "polintr", # level of political interest
+    
+    # satisfaction with life and country
+    "stflife", # How satisfied with life as a whole
+    "stfeco", # How satisfied with present state of economy in country
+
+            # immigration
+    "imwbcnt", #Immigrants make country worse or better place to live
+    
+    ## variables only available from R8 - for use in regression modelling. 
+    "netusoft", # internet use - R8 onwards only
+    "nwspol", # Newspaper reading, politics/current affairs on average weekday - R8 onwards
+    "pstplonl", # Posted or shared anything about politics online last 12 months - R8 on
+    "atchctr" # How emotionally attached to [country] - R8 onwards
+)
+```
+
+```{r}
+
+# now limit to only variables of interest
+ess_clean <- ess_data |> 
+  filter(essround >5) |> 
+  select(any_of(demog_vars))
+
+
+```
+
+Check distributions
+```{r}
+# for misc variables
+ess_clean |> 
+  filter(cntry == "GB") |> 
+  select(hhmmb, hinctnta, netusoft, atchctr, pstplonl, imwbcnt, lrscale) |> 
+  plot_histogram()
+
+table(as_factor(ess_clean$hlthhmp))
+table(as_factor(ess_clean$atchctr))
+table(ess_clean$atchctr)
+table(as_factor(ess_clean$pstplonl))
+
+```
+We will drop household size as it's relatively uninterpretable. The others will be recoded generally for easier interpretation within models. 
+
+#### Issue with news consumption variable.
+
+We see many individuals with extremely high reported news consumption. Some even at over 24 hours a day (max value is 1439 minutes of political news consumption per day). This is clearly an issue. 
+Particularly as we see the low reported political interest for many of these people. 
+From this, we will drop the daily political news comsumption variable and rely on self reported political interest and post online. 
+
+```{r}
+# focus on the political news consumption which appears to have some coding issues:
+ess_clean |> 
+  filter(cntry == "GB", essround>7) |> 
+  select(nwspol) |> 
+  plot_histogram()
+
+ess_clean |> 
+  filter(cntry == "GB", essround>7) |> 
+  select(nwspol) |>
+  summary()
+#
+ess_clean |> 
+  filter(cntry == "GB", essround>7,
+         nwspol>200) |> select(polintr, nwspol)
+
+
+```
+
+### Clean varibles for modelling. 
+
+## to clean variables:
+
+agea - to standard age groups 
+eisced - combine to fewer groups. 
+hinctnta - combine income deciles to 3 levels. 
+domicil - to 4pt scale - combine country data
+hlthhmp - physical or mental disability, combine both yes categories.
+polintr - binary yes/no (from 4pt scale)
+
+Regroup all the 10pt scale variables to categorical - 3pt
+  3pt = 0-3, 4-6, 7-10
+
+10pt vars (on a scale of 0-10)
+lrscale - to 3pt scale->  left (0-3), moderate (4-6) and right (7-10) 
+
+R8 onwards varaiables:
+netuseoft - to daily or not daily (the majority of users are daily internet so converting to binary as it still has class imbalance)
+nwspol - DROPPED due to data quality issue frmom above.  political_news time per day - group to 1hr plus or less 
+atchctr - convert to 3pt categorical 
+post political online - keep as binary but relevel to "yes" and "no'
+
+1. Create function to tidy all 10pt scale variables (into 3pt scales) 
+
+```{r}
+#function to create high/low variables for each: 
+convert_10pt_3pt <- function(var_10pt) {
+  factor(
+    case_when(
+      var_10pt < 4 ~ "Low",
+      between(var_10pt, 4, 6) ~ "Moderate",
+      between(var_10pt, 7, 10) ~ "High", # use range to avoid any poorly coded 77/88/99 values being included
+      TRUE ~ NA #account for true NAs from no response
+  ),
+  levels = c("High","Moderate","Low",  NA))
+}
+
+
+```
+
+First, convert all to factor, this will give us the text labels too. 
+
+```{r}
+
+# add on recoded variables that are cleaned.
+ess_clean <- ess_clean |> 
+    mutate(
+      # create age groupings
+      age_rec = factor(case_when(agea <20 ~ "<20",
+                             between(agea, 20, 29) ~ "20-29",
+                             between(agea, 30, 44) ~ "30-44",
+                             between(agea, 45, 64) ~ "45-64", 
+                             agea >= 65 ~ ">=65",
+                             TRUE ~ NA),
+                          levels = c("<20", "20-29", "30-44", "45-64", ">=65")),
+      
+      # recode as factor for labels but these 3 are unchanged on scales
+      gender = as_factor(gndr),
+      ethnic_minority = as_factor(blgetmg),
+
+      # create education factor levels
+      educ_level = factor(case_when(between(eisced, 1, 2) ~ "Lower secondary", # 1 or 2 = low (lower secondary)
+                             between(eisced, 3, 4) ~ "Upper secondary", # 3 or 4 = medium (upper secondary)
+                             between(eisced, 5, 7) ~ "Tertiary", # 5, 6 or 7 = high (vocational/tertiary)
+                             TRUE ~ NA),
+                          levels = c("Lower secondary", "Upper secondary", "Tertiary")),
+      
+      # self reported income stress (4pt scale)
+      income_stress = as_factor(hincfel),
+
+      # group income at 3pt level. This doesn't have zero value so we create our own groups.
+      income_group = factor(case_when(between(hinctnta, 1,3) ~ "Low (Decile <4)",
+                                      between(hinctnta, 4,7) ~ "Moderate (Decile 4-7)",
+                                      between(hinctnta, 8,10) ~ "High (Decile 8+)",
+                                      TRUE ~ NA_character_)),
+      
+      # region type - just group country level data, so we have a 4pt scale. 
+      area_type = fct_collapse(as_factor(domicil), 
+                                "Country" = c("Country village", "Farm or home in countryside")),
+      
+      region = as_factor(region), # for if we map. 
+      
+      # health - physical/mental limitation flag: 
+      health_disability = factor(case_when(between(hlthhmp, 1,2) ~ "Yes",
+                                           hlthhmp == 3 ~ "No",
+                                           TRUE ~ NA)),
+      # left right scale - manually so I can name
+      left_right =   factor(case_when(lrscale < 4 ~ "Left (0-3)",
+                                      between(lrscale, 4, 6) ~ "Moderate (4-6)",
+                                      between(lrscale, 7, 10) ~ "Right (7-10)",
+                                      TRUE ~ NA)), #account for true NAs from no response
+
+      # convert political interst to binary 
+      polintr_binary = case_when(polintr %in% c(1,2) ~ "Yes",
+                                    polintr %in% c(3,4) ~ "No",
+                                    TRUE ~ NA_character_),
+      
+      # convert satisfactions from 10pt to 3pt scale
+      life_sat = convert_10pt_3pt(stflife), 
+      econ_sat = convert_10pt_3pt(stfeco),
+      
+      #attitudes to immigration - make country a better place 
+      immig_support = convert_10pt_3pt(imwbcnt),
+      
+      ## R8 onwards variables: 
+      daily_netuse = factor(case_when(as_factor(netusoft) %in% c("Never", "Only occasionally", "A few times a week", "Most days") ~ "No",
+                                      as_factor(netusoft) == "Every day" ~ "Yes",
+                                      TRUE ~ NA)),
+      country_attach = convert_10pt_3pt(atchctr),
+      post_polonline = factor(case_when(pstplonl == 2 ~ "No",
+                                        pstplonl == 1 ~ "Yes",
+                                        TRUE ~ NA))
+    ) |> 
+  
+  select(-nwspol) ## removed due to data quality issues. 
+
+```
+
+
+Now we remove our additional columns: 
+
+```{r}
+ess_clean <- ess_clean |> 
+  select(
+      essround,
+      cntry, 
+      anweight, 
+      trust_europ,
+      trust_parliament,
+      
+      # demog vars: 
+      gender, # gender - binary
+      age_rec, # age recoded - 5pt 
+      educ_level, # education recoded - 3pt 
+      income_group, # recoded deciles to 3pt
+      income_stress, # income stress level - 4pt
+      ethnic_minority, # minority ethnic group - binary
+      area_type, # regional description - 4pt
+      region, # UK 13 region names for mapping if required..
+      health_disability, # physical/mental disability - binary
+      left_right, ## recoded - 3pt 
+      polintr_binary, # recoded - 3pt
+      life_sat, # recoded - 3pt
+      econ_sat, # recoded - 3pt
+      immig_support, # recoded - 3pt 
+      daily_netuse, # recoded - binary 
+      country_attach, # recode - 3pt
+      post_polonline # was already a binary
+  )
+
+```
+
+Now create a GB only file we use for our conditional means. 
+
+```{r}
+gb_clean <- ess_clean |> 
+  filter(cntry == "GB")
+```
+
+
+## Create weighted conditional means. 
+
+Now we calculate all of the means within groups - this is our actual bivariate analysis. 
+
+This loop runs through each column and returns the mean for each level, standard error and confidence intervals. 
+
+```{r}
+# setup survey design
+simple_design <- gb_clean |> 
+  as_survey_design(ids = 1, weights = anweight)
+
+# create list of our demographic variables
+demog_vars <- gb_clean |> select(gender:post_polonline) |> names()
+demog_vars
+```
+
+Create summary of all bivariate averages for EU trust within the UK: 
+
+```{r}
+# loop to create 
+all_trust_eu_summary <- 
+  map_dfr(demog_vars, function(dv) {
+    # 1) build a one‐sided formula for svyby: ~gender, ~age_rec, etc.
+    by_fml <- as.formula(paste0("~", dv)) 
+    
+    # 2) call svyby() for trust_europ
+    tmp <- svyby(
+      formula  = ~trust_europ,
+      by       = by_fml,
+      design   = simple_design,
+      FUN      = svymean,
+      vartype  = c("ci", "se"),
+      ci.level = 0.95,
+      na.rm    = TRUE)
+    
+    # 3) Tidy column names & capture the “level” for this dv
+    tmp |> 
+      rename(mean = trust_europ,
+             ci_low   = ci_l,
+             ci_high  = ci_u
+             ) |> 
+      mutate(
+        demog_var = dv,
+        level = as.character(.data[[dv]])
+        ) |> 
+      select(demog_var, level, mean, se, ci_low, ci_high)
+  }) |> 
+  filter(demog_var != "region")
+
+print(all_trust_eu_summary)
+
+```
+
+Calculate overall average for plotting comparison point. 
+
+```{r}
+# calculate averages across all waves to get an idea and standardise later:
+overall_eu_trust <- gb_clean |> 
+  as_survey_design(ids = 1, weights = anweight) |> 
+  filter(!is.na(trust_europ)) |> 
+  summarise(mean_trust = survey_mean(trust_europ, vartype = "ci"))
+
+print(overall_eu_trust)
+
+# pull the avg for standardising.
+overall_avg <- overall_eu_trust$mean_trust[1]
+overall_avg
+```
+
+Now plot with the confidence intervals  
+
+```{r}
+all_trust_eu_summary |> 
+  ggplot(aes(x = mean,
+           y = fct_reorder(paste0(demog_var, ": ", level), mean))) +
+  geom_point(size = 2, colour = "steelblue") +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high),
+                 height = 0, colour = "gray50") +
+#  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Weighted mean of Trust in EU Parliament",
+    y = NULL,
+    title = "Conditional Mean of Trust in EU Parliament, R6-R11, GB only",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text.y      = element_text(angle = 0, face = "bold"),
+    axis.text.y       = element_text(size = 10),
+    panel.spacing.y   = unit(0.5, "lines")
+  )+ 
+  geom_vline(xintercept = overall_avg)
+
+
+```
+
+Now grouped by the actual demographic variables too: 
+```{r}
+all_trust_eu_summary |> 
+  ggplot(aes(x = mean,
+           y = fct_reorder(level, mean))) +
+  geom_point(size = 2, colour = "steelblue") +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high),
+                 height = 0, colour = "gray50") +
+  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Weighted mean of Trust in EU Parliament",
+    y = NULL,
+    title = "Conditional Mean of Trust in EU Parliament, R6 to R11, GB only",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text.y      = element_text(angle = 0, face = "bold"),
+    axis.text.y       = element_text(size = 10),
+    panel.spacing.y   = unit(0.5, "lines")
+  ) + 
+  geom_vline(xintercept = overall_avg)+
+    scale_y_discrete(expand = expansion(add = c(1, 1)),
+                   position = "left")
+
+
+
+```
+We calculate the standardised data. We exclude region as they are not granular enough and the data appears to disagree with estimates of the Brexit vote, where in this data, London has the highest levels of EU trust. 
+
+```{r}
+# ensure you calculated the overall average in the data above. 
+standardized_trust_eu <- all_trust_eu_summary |> 
+  mutate(std_mean = mean - overall_avg,
+         std_ci_low = ci_low - overall_avg,
+         std_ci_high = ci_high - overall_avg) |> 
+  filter(demog_var != "region")
+```
+
+And plot the standardised results
+
+```{r}
+ggplot(standardized_trust_eu,
+       aes(x = std_mean,
+           y = fct_reorder(paste0(demog_var, ": ", level), mean))) +
+  geom_point(size = 2, colour = "steelblue") +
+  geom_errorbarh(aes(xmin = std_ci_low, xmax = std_ci_high),
+                 height = 0, colour = "gray50") +
+  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Standardised mean of Trust in EU Parliament",
+    y = NULL,
+    title = "Standardised Mean of Trust in EU by Demographic Groups, R6 to R11, GB only",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text.y      = element_text(angle = 0, face = "bold"),
+    axis.text.y       = element_text(size = 10),
+    panel.spacing.y   = unit(0.5, "lines")
+  )+
+  geom_vline(xintercept = 0)
+
+
+```
+
+### Trust in local (UK) Parliament by demographics
+
+Repeat the process for trust in local parliament. 
+
+```{r}
+# setup survey design
+simple_design <- gb_clean |> 
+  as_survey_design(ids = 1, weights = anweight)
+
+# create list of our demographic variables
+demog_vars <- gb_clean |> select(gender:post_polonline) |> names()
+demog_vars
+
+
+# local parliament loop through each demogrpahic then add on
+all_trust_local_summary <- 
+  map_dfr(demog_vars, function(dv) {
+    # 1) build a one‐sided formula for svyby: ~gender, ~age_group, etc.
+    by_fml <- as.formula(paste0("~", as_factor(dv))) 
+    
+    # 2) call svyby() for trust_europ
+    tmp <- svyby(
+      formula  = ~trust_parliament,
+      by       = by_fml,
+      design   = simple_design,
+      FUN      = svymean,
+      vartype  = c("ci", "se"),
+      ci.level = 0.95,
+      na.rm    = TRUE
+      )
+    
+    # 3) Tidy column names & capture the “level” for this dv
+    tmp |> 
+      rename(
+        mean = trust_parliament,
+        ci_low = ci_l,
+        ci_high = ci_u) |> 
+      mutate(
+        demog_var = dv,
+        level = as.character(.data[[dv]])
+        ) |> 
+      select(demog_var, level, mean, se, ci_low, ci_high)
+  }) |> filter(demog_var != "region")
+
+print(all_trust_local_summary)
+```
+
+Calculate the average for gb trust:
+
+```{r}
+# calculate averages across all waves to get an idea and standardise later:
+overall_gb_trust <- gb_clean |> 
+  as_survey_design(ids = 1, weights = anweight) |> 
+  filter(!is.na(trust_parliament)) |> 
+  summarise(mean_trust = survey_mean(trust_parliament, vartype = "ci"))
+
+print(overall_gb_trust)
+
+# pull the avg for standardising.
+overall_avg_local <- overall_gb_trust$mean_trust[1]
+overall_avg_local
+```
+
+Plot the values for local parliament: 
+
+```{r}
+ggplot(all_trust_local_summary,
+       aes(x = mean,
+           y = fct_reorder(paste0(demog_var, ": ", level), mean))) +
+  geom_point(size = 2, colour = "steelblue") +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high),
+                 height = 0, colour = "gray50") +
+#  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Weighted mean of Trust in Parliament",
+    y = NULL,
+    title = "Conditional Mean of Trust in UK Parliament by Demographic Groups",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text.y = element_text(angle = 0, face = "bold"),
+    axis.text.y = element_text(size = 10),
+    panel.spacing.y = unit(0.5, "lines")
+  )+ 
+  geom_vline(xintercept = overall_avg_local)
+
+
+```
+
+And unordered data, grouped by variable:
+
+```{r}
+ggplot(all_trust_local_summary,
+       aes(x = mean,
+           y = fct_reorder(level, mean))) +
+  geom_point(size = 2, colour = "steelblue") +
+  geom_errorbarh(aes(xmin = ci_low, xmax = ci_high),
+                 height = 0, colour = "gray50") +
+  facet_grid(demog_var~., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Weighted mean of Trust in Parliament",
+    y = NULL,
+    title = "Conditional Mean of Trust in UK Parliament by Demographic Groups",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text.y      = element_text(angle = 0, face = "bold"),
+    axis.text.y       = element_text(size = 10),
+    panel.spacing.y   = unit(0.5, "lines")
+  )+ 
+  geom_vline(xintercept = overall_avg_local)
+
+```
+
+
+### Join data together: 
+
+Combine data for euro and local parliament trust. 
+
+```{r}
+#join
+overall_demog_trust <- left_join(
+  all_trust_eu_summary, all_trust_local_summary,
+  by = c("demog_var", "level"),
+  suffix = c(".eu", ".uk")
+)
+
+overall_demog_trust
+```
+
+##### Check correlations:
+
+```{r}
+overall_demog_trust |> 
+  ggplot(aes(x = mean.eu,
+             y = mean.uk))+
+  geom_point(size = 2)+
+  theme_minimal()+
+  labs(title = "Avereage trust in EU vs UK parliament by demographic group",
+       x = "Average EU Parliament trust (/10)",
+       y = "Average UK Parliament trust (/10)")
+
+cor(overall_demog_trust$mean.eu,
+                 overall_demog_trust$mean.uk)
+```
+
+We see a strong positive correlation. This trend is biased as it's all trained on the same data and not independent groups. But it does show that the demographic groups generally have positive correlations with trust in UK and EU. This supports the findings of (Harteveld et al. 2013) that found EU trust is driven by local government trust. 
+
+Plot both together: 
+
+```{r}
+ggplot(overall_demog_trust) +
+  geom_point(aes(x = mean.eu,
+                 y = fct_reorder(level, mean.eu),
+                 size = 2, colour = "steelblue")) +
+  geom_errorbarh(aes(xmin = ci_low.eu, 
+                     xmax = ci_high.eu),
+                 height = 0, colour = "gray50") +
+  geom_point(aes(x = mean.uk,
+                 y = fct_reorder(level, mean.uk), 
+                 size = 2, colour = "orange")) +
+  geom_errorbarh(aes(xmin = ci_low.uk, 
+                     xmax = ci_high.uk),
+                 height = 0, colour = "gray50") +
+  #facet_grid(demog_var~., scales = "free_y", space = "free_y") +
+  labs(
+    x = "Weighted mean of Trust in EU/UK Parliament",
+    y = NULL,
+    title = "Conditional Mean of Trust in EU/UK Parliament",
+    subtitle = "Point estimates ± 95% CI"
+  ) +
+  theme_minimal() +
+  theme(strip.text.y = element_text(angle = 0, face = "bold"),
+        axis.text.y  = element_text(size = 10),
+        panel.spacing.y = unit(0.5, "lines")
+  )
+  
+```
+
+Plot with negative values for UK to show the group's values next to each other:
+
+```{r}
+# Create a modified dataset where UK values are negative (for left alignment)
+plot_data <- overall_demog_trust |> 
+  mutate(neg.mean.uk = -mean.uk,
+         std.uk = mean.uk-overall_avg_local,
+         std.uk_cilow = ci_low.uk-overall_avg_local,
+         std.uk_cihigh = ci_high.uk-overall_avg_local,
+         std.eu = mean.eu - overall_avg,  # Negate UK values so they appear on the left
+         std.eu_cilow = ci_low.eu-overall_avg,
+         std.eu_cihigh = ci_high.eu-overall_avg)
+
+```
+
+```{r}
+
+# Plot
+ggplot(plot_data) +
+  # plot eu values
+  geom_point(aes(x = mean.eu, y = fct_reorder(level, mean.eu)),
+             color = "steelblue", size = 2) + # EU
+  geom_errorbarh(aes(y = level, xmin = ci_low.eu, xmax = ci_high.eu),
+                 color = "gray50", height = 0) +
+  # plot gb values
+  geom_point(aes(x = mean.uk, y = fct_reorder(level, mean.uk)),
+             color = "orange", size = 2) + # UK
+  geom_errorbarh(aes(y = level, xmin = ci_high.uk, xmax = ci_low.uk),
+                 color = "gray50", height = 0) +
+  labs(
+    x = "Weighted Mean of Trust",
+    y = NULL,
+    title = "Trust in EU vs UK Parliament by Demographic Group",
+    subtitle = "EU = Blue; UK = Orange"
+  ) +
+  theme_minimal() +
+  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y",
+             switch = "y") + # For left-side placement of "strip" label 
+  theme(
+    strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 0), 
+    strip.placement = "outside", 
+    axis.text.y = element_text(size = 10, hjust = 1), 
+    panel.spacing.y = unit(0.5, "lines")
+  ) +
+  scale_y_discrete(expand = expansion(add = c(1, 1)),
+                   position = "left")
+```
+
+Standardised trends for trust in UK and EU Parliament by demographic gorup  
+
+```{r}
+# Plot with standardised data to show around the same zero value
+ggplot(plot_data) +
+  geom_point(aes(x = std.eu, y = fct_reorder(interaction(demog_var, level), std.eu)), 
+             color = "steelblue", size = 2) + # EU
+  geom_errorbarh(aes(y = interaction(demog_var, level), 
+                     xmin = std.eu_cilow, xmax = std.eu_cihigh), 
+                 color = "gray50", height = 0) + 
+
+  geom_point(aes(x = std.uk, y = fct_reorder(interaction(demog_var,level), std.uk)), 
+             color = "orange", size = 2) + # UK
+  geom_errorbarh(aes(y = interaction(demog_var, level), 
+                     xmin = std.uk_cilow, xmax = std.uk_cihigh), 
+                 color = "gray50", height = 0) + 
+
+ # geom_vline(xintercept = , linetype = "dashed", color = "black") +  # Middle reference line
+
+  labs(
+    x = "Weighted Mean of Trust in UK and EU Parliament, UK R5-8",
+    y = NULL,
+    title = "Standardised trust in EU vs UK Parliament",
+    subtitle = "Blue = EU; Orange = UK. CI ± 95%"
+  ) +
+  theme_minimal()+
+  scale_y_discrete(expand = expansion(add = c(1, 1))) # Adds space before/after categories
+
+
+```
+
+
+Plot standardised:
+
+```{r}
+
+
+# Plot
+ggplot(plot_data) +
+  # plot eu values
+  geom_point(aes(x = std.eu, y = fct_reorder(level, std.eu)),
+             color = "steelblue", size = 2) + # EU
+  geom_errorbarh(aes(y = level, xmin = std.eu_cilow, xmax = std.eu_cihigh),
+                 color = "gray50", height = 0) +
+  # plot gb values
+  geom_point(aes(x = std.uk, y = level),
+             color = "orange", size = 2) + # UK
+  geom_errorbarh(aes(y = level, xmin = std.uk_cilow, xmax = std.uk_cihigh),
+                 color = "gray50", height = 0) +
+  labs(
+    x = "Weighted Mean of Trust",
+    y = NULL,
+    title = "Standardised trust in EU vs UK Parliament by Demographic Group",
+    subtitle = "EU = Blue; UK = Orange"
+  ) +
+  theme_minimal() +
+  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y",
+             switch = "y") + # For left-side placement of "strip" label 
+  theme(
+    strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 0), 
+    strip.placement = "outside", 
+    axis.text.y = element_text(size = 10, hjust = 1), 
+    panel.spacing.y = unit(0.5, "lines")
+  ) +
+  scale_y_discrete(expand = expansion(add = c(1, 1)),
+                   position = "left")
+```
+
+
+
+Plot as table using stargazer 
+
+```{r}
+summary_plot_data <- plot_data |> 
+  select(demog_var, level, mean.eu, se.eu, mean.uk, se.uk)
+
+stargazer(summary_plot_data,
+          type = "text",  # Use "latex" or "html" for different formats
+          summary = FALSE, # Prevent summary statistics
+          rownames = FALSE, # Remove row numbers
+          title = "Summary Table",
+          column.labels = c("Demographic Variable", "Level", "Mean EU", "SE EU", "Mean UK", "SE UK"),
+          align = TRUE)
+```
+
+
+
+
