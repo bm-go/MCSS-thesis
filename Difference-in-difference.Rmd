@@ -1,0 +1,428 @@
+---
+title: "Difference-in-Difference"
+author: "Bradley McKenzie"
+date: "June 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+
+This script will run the code to compute the difference-in-difference (DiD) analysis between Germany and the UK around the Brexit Referendum. We run the DiD to compare trends in trust in EU Parliament, to see if the Referendum was a breaking point for EU trust. 
+The hypothesis is actually that trust has increased. Because 
+
+It will run a naive DiD model which is just the weighted averages for 
+
+This script is based on DiD code from a course within our Master in Computational Social Sciences taught by Patrick Kraft. 
+
+### Call exisitng scripts to get data and code. 
+
+First we call the exisitng models so we have our cleaned dataset. This is the nested process from these scripts: 
+  - Dataframe creation_ESS.Rmd -> load data 
+  - Univariate analysis.Rmd -> create weighted averages for each country in each round for each trust measure
+  - Multivariate analysis.Rmd -> cleans the demographic variables and models weighted averages within groups across R6-R11. 
+
+The primary first step is to create an account on ESS, download data and update the file location that calls your underlying dataset within the Dataframe creation script.
+
+```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::purl("Multivariate analysis and var cleaning.Rmd", output = "temp_data_prep.R")
+source("temp_data_prep.R")
+file.remove("temp_data_prep.R")
+
+# clean our R environment from the extra files. 
+rm(convert_10pt_3pt, extreme_trust, # functions 
+   immig_vars,inc_edu_vars, missing50plus, polit_vars, satis_vars, # variable lists
+   cor_matrix, overall_avg, overall_avg_local, overall_eu_trust, overall_gb_trust, # hard coded values
+   all_trust_eu_summary, all_trust_local_summary, #multivar tables
+   gb_data_cleaning, 
+    # 
+   )
+```
+
+We are now left with dataframes: 
+- ESS data - our full set. 
+- ESS clean - our primary analysis set for R5-R11
+- GB clean - our GB only set for R5-R11
+
+#### Additional libraries:
+
+```{r}
+library(broom)
+library(estimatr)
+library(multiwayvcov)
+library(plm)
+library(lmtest)
+library(fixest)
+library(modelsummary)
+```
+
+
+### Review parallel trends assumption.
+
+#### Visual inspection. 
+
+This recreates the plots from "Univariate analysis.Rmd" to show the parallel trends assumption is satisfied:
+
+##### The pre-Referndum period 
+
+```{r}
+### plotting just the pre-Referendum periods 
+trust_summaries_df |> 
+  # limit data 
+  filter(trust_variable == "trust_europ",
+         cntry %in% c("GB", "DE"),
+         essround <8) |> 
+  #clean names for plotting
+  mutate(cntry = ifelse(cntry == "GB", "UK", "Germany"),
+         trust_variable = ifelse(trust_variable == "trust_europ", "Trust in European Parliament", trust_variable)) |> 
+  # plot 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = cntry, colour = cntry)) +  
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs Germany, ESS round 1-8",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (weighted)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 0.75,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,7,1),
+                     limits = c(min(trust_summaries_df$essround),8)) +
+  # add referendum line
+  # geom_vline(xintercept = 7.7, color = "orange", size = 1.5, alpha = 0.5)+
+  # annotate(geom="text", x = 7.4, y =4.5, label = "Referendum",
+  #            angle = 90, color = "orange")+
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank(), # Remove vertical grid lines 
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank()
+  )
+```
+
+2. Plotting for all available data - R1-R11.
+
+```{r}
+### plotting just the pre-Referendum periods 
+trust_summaries_df |> 
+  # limit data 
+  filter(trust_variable == "trust_europ",
+         cntry %in% c("GB", "DE")) |> 
+  #clean names for plotting
+  mutate(cntry = ifelse(cntry == "GB", "UK", "Germany"),
+         trust_variable = ifelse(trust_variable == "trust_europ", "Trust in European Parliament", trust_variable)) |> 
+  # plot 
+ggplot(aes(x = essround, y = wt_avg_mean, 
+           group = cntry, colour = cntry)) +  
+  geom_line(size = 1) +  # Line for the trend
+  geom_point(size = 1.5) +  # Points for each mean
+  geom_errorbar(aes(ymin = ci_l, ymax = ci_u),  # Error bars using CI bounds
+                width = 0.5,  # Width of the error bar caps
+                color = "gray") +  
+  labs(title = "Mean Trust in Parliament - UK vs Germany, ESS round 1-11",
+       subtitle = "With 95% Confidence Intervals",
+       x = "ESS Round",
+       y = "Mean Trust (weighted)") +
+  theme_minimal()+
+  
+  # add extra labels to see each item
+  geom_label_repel(
+    data = . %>% group_by(trust_variable) %>% filter(essround == max(essround)),
+    aes(label = cntry, fill = cntry), 
+    color = "white",    
+    fontface = "bold",
+    alpha = 0.8,
+    label.size = 0.5,
+    show.legend = FALSE,
+    box.padding = unit(0.5, "lines"),
+    point.padding = unit(0.5, "lines"),
+    segment.colour = NA,
+    direction = "y",
+    nudge_x = 1,
+    min.segment.length = 0)+
+    # set limits 
+  scale_x_continuous(breaks = seq(1,11,1),
+                     limits = c(min(trust_summaries_df$essround),max(trust_summaries_df$essround)+1.5)) +
+  # add referendum line
+  geom_vline(xintercept = 7.7, color = "orange", size = 1.5, alpha = 0.5)+
+  annotate(geom="text", x = 7.4, y =4.5, label = "Referendum",
+             angle = 90, color = "orange")+
+  theme(legend.position = "none",
+        panel.grid.major.x = element_blank(), # Remove vertical grid lines 
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank()
+  )
+
+```
+
+
+#### Compare via matching algorithm. 
+
+With Euclidian matching, it also finds that Germany is the best comparison group. When matched on data from R1 to R7 (pre-Referendum):
+
+```{r}
+
+```
+
+## Run crude DiD model
+
+We calculate the pre and post-treatment means for the control (Germany) and treatment (UK).
+We have these mean values in each round created in our trust_summaries dataframe:
+
+```{r}
+# create smaller dataset to work with. 
+did_trust_eu_crude <- trust_summaries_df |> 
+  filter(cntry %in% c("GB", "DE"),
+         trust_variable == "trust_europ") |> 
+  mutate(cntry = ifelse(cntry == "GB", "UK", "Germany"),
+         trust_variable = ifelse(trust_variable == "trust_europ", "Trust in European Parliament", trust_variable))
+
+print(did_trust_eu_crude)
+```
+
+Now calculate our per and post treatment measures:
+The referendum was 23 June 2016. 
+The R8 fieldwork happened in September 2016 - January 2017. This is our post-period.  
+The R7 fieldwork happened in September 2014 - January 2015. This is our pre-period.
+
+```{r}
+# calc weighted values
+pre_treat <- did_trust_eu_crude |> filter(essround == 7, cntry == "UK") |> pull(wt_avg_mean)
+post_treat <- did_trust_eu_crude |> filter(essround == 8, cntry == "UK") |> pull(wt_avg_mean)
+pre_control <- did_trust_eu_crude |> filter(essround == 7, cntry == "Germany") |> pull(wt_avg_mean)
+post_control <- did_trust_eu_crude |> filter(essround == 8, cntry == "Germany") |> pull(wt_avg_mean)
+
+# calc crude DiD score. 
+did <- (post_treat-pre_treat)-(post_control-pre_control)
+did
+
+
+# print results
+glue("In the pre-Referndum period, the UK had a weighted mean trust in the EU parliament of {round(pre_treat,2)}, which increased to {round(post_treat,2)} in R8 of the ESS post-Referndum (+{round(post_treat-pre_treat,2)}).\n
+     Germany's EU Parliament trust increased from {round(pre_control,2)} in R7 to {round(post_control,2)} in R8 (+{round(post_control-pre_control,2)}).\n
+     The did score (post_treat-pre_treat)-(post_control-pre_control) = {round(did,3)}")
+
+
+```
+
+This means that the average trust in the EU parliament increased 0.18 points out of 10 in teh UK compared to Germany in this period. 
+We now test whether this is significant and include covariates. 
+
+Test with survey mean package:
+
+```{r}
+
+simple_design_did <- ess_clean |> 
+  as_survey_design(weights = anweight, ids = 1) |> 
+  filter(cntry %in% c("GB", "DE"))
+
+
+simple_design <- svydesign(ids = ~1, weights = ~anweight, data = ess_clean)
+
+results_srvyr <- simple_design_did |> 
+  filter(!is.na(trust_europ)) |>  # Important: filter NA values before grouping if they affect your groups
+  group_by(cntry, essround) |> 
+  summarize(
+    mean_trust_europ = survey_mean(trust_europ, na.rm = TRUE),
+    n_observations = unweighted(n()) # To get the unweighted count in each group
+  )
+
+
+
+results_srvyr |> arrange(desc(essround)) |> group_by(essround) |> summarise(max = max(mean_trust_europ),
+                                                                            min = min(mean_trust_europ), 
+                                                                            diff = max-min)
+
+```
+
+Create dataframes to measure the effect at various stages:
+
+```{r}
+# create df for just Germany and Uk in R7+ R8
+ess_did_w7w8 <- ess_clean |> 
+  filter(cntry %in% c("GB", "DE"),
+         essround %in% c(7,8)) |> 
+  mutate(PostPeriod = ifelse(essround == 8, 1,0))
+
+# create df for R7+R9
+ess_did_w7w9 <- ess_clean |> 
+  filter(cntry %in% c("GB", "DE"),
+         essround %in% c(7,9)) |> 
+  mutate(PostPeriod = ifelse(essround == 9, 1,0))
+
+# create df for R6+R7 (pre-period robustness check)
+ess_did_w6w7 <- ess_clean |> 
+  filter(cntry %in% c("GB", "DE"),
+         essround %in% c(6,7)) |> 
+  mutate(PostPeriod = ifelse(essround == 7, 1,0))
+
+```
+
+
+### DiD crude between R7 and R8
+Now we estimate for the immediate effect: 
+
+```{r}
+
+# we use all 3 datasets to see the controls
+m_w7w8 <- lm_robust(trust_europ ~ cntry*PostPeriod, 
+                   data = ess_did_w7w8)
+summary(m_w7w8) # results below: 
+
+```
+
+This is not significant, HOWEVER - We see a different score in our interaction value than the above as there aren't weighted. Calc again with weighted values: 
+
+From both of these calculations we get our true effect post-Referendum (in the interaction term (cntryGB:PostPeriod = 0.18588)) and also are able to apply the weights effectively. 
+
+```{r}
+
+# calc weighted values. 
+m_w7w8_wt <- lm_robust(trust_europ ~ cntry*PostPeriod, 
+                   data = ess_did_w7w8,
+                   weights = anweight)
+summary(m_w7w8_wt) # results below: 
+modelsummary(m_w7w8_wt)
+
+## or weighted model with the svyglm package -
+simple_design_w7w8 <- ess_did_w7w8 |> 
+  as_survey_design(weights = anweight, ids = 1)
+
+m_w7w8_wt2 <- svyglm(trust_europ ~ cntry * PostPeriod,
+                            design = simple_design_w7w8,
+                            family = gaussian(link = "identity")) # For OLS, specify gaussian family
+summary(m_w7w8_wt2)
+```
+
+We see that it is STILL NOT statistically significant at the 5% level. There is an increase but it's not statistically signfiicant. 
+
+#### Testing ongoing effect - comparing R7 to R9
+
+Test the effect for R7 and R9 to see if it changes. Use weighted values for accuracy. 
+
+```{r}
+# calc weighted values. 
+m_w7w9_wt <- lm_robust(trust_europ ~ cntry*PostPeriod, 
+                   data = ess_did_w7w9,
+                   weights = anweight)
+#print results: 
+summary(m_w7w9_wt) 
+```
+
+We see that between period between Round 7 and Round 9, we have a negative effect. It is NOT statistically significant with a t-value of -0.7845 and a p-value ~= 0.43. So we don't observe an ongoing trend here.  
+
+#### Testing pre-treatment effect - comparing R6 to R7
+
+```{r}
+# calc weighted values. 
+m_w6w7_wt <- lm_robust(trust_europ ~ cntry*PostPeriod, 
+                   data = ess_did_w6w7,
+                   weights = anweight)
+#print results: 
+summary(m_w6w7_wt) 
+
+```
+
+We see there is no statistically significant difference between R6 and R7 in the lead up between Germany and the UK. The analysis shows that the trends were similar in trust to the EU. This could be due to the impact of the refugee crisis Germany was experiencing around R6 and broader collapse in EU trust for the Uk with Brexit (including the impact of coverage of the refugee crisis).
+
+In fact, there is also no difference in effect between Germany and Uk between R6 and R7 with both decreasing to their R7 low. they both dropped around 0.23 points from R6 but there was a negligable difference between them otherwise. 
+
+Thus we cannot see measurable differences in the crude DiD between Germany and the UK. 
+
+
+
+#### Longer time period crude model
+
+Comparing all waves to the base period, (R6). Treat time as a factor rather than modelling a linear trend (which it would be if we kept it numeric)
+
+```{r}
+summary(lm_robust(formula = trust_europ ~ cntry * factor(essround), 
+                  data = filter(ess_clean, 
+                                cntry %in% c("GB", "DE")), 
+                  weights = anweight))
+```
+
+We see that compared to Round 6, it appears that only Round 10 and Round 11 were significant. 
+
+We do not perform additional measurements with fixed effects as we don't have longitudinal data to check "within" group changes. 
+
+### Testing DiD with covariates - Robustness check
+Include covariates that are significant after the lasso adjustment : 
+
+```{r}
+m_r8_gaus <- glm(trust_europ ~ gender + age_rec + educ_level + income_group + income_stress + ethnic_minority + area_type + health_disability + left_right + polintr_binary + life_sat + econ_sat + immig_support + daily_netuse + country_attach + post_polonline,
+      data = filter(gb_clean, essround == 8),
+      family = "gaussian")
+
+summary(m_r8_gaus)
+
+
+```
+
+```{r}
+cor_matrix <- cor(simple_design_w7w8$variables,
+                  use = "pairwise.complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+```
+
+
+
+Let's add covariates. Why add them? what purpose do they serve?
+
+  - We at least control for the known observed confounding variables -> this is an additional robustness check.
+```{r}
+ess_clean <- ess_clean |> mutate(post_polonline = factor(case_when(post_polonline == 2 ~ "No",
+                                                      post_polonline == 1 ~ "Yes",
+                                                      TRUE ~ NA))
+)
+```
+
+
+```{r}
+m_w7w8_weighted_did_covars <- svyglm(
+  trust_europ ~ cntry*PostPeriod + # DiD terms
+        # incl all demog variables to see
+                gender + age_rec + educ_level + income_group + income_stress +
+                ethnic_minority + area_type + health_disability + left_right + 
+                polintr_binary + life_sat + econ_sat + immig_support,
+               ##  daily_netuse + country_attach + post_polonline, ## DON'T INCLUDE R8 Only variables
+  design = simple_design_w7w8,
+  family = gaussian(link = "identity") # For OLS regression
+)
+
+summary(m_w7w8_weighted_did_covars)
+corrplot()
+```
+We see the interaction term is still not significant in estimating trust in europe. 
+
+### Robustness check - against period t-1 (R6)
+
+```{r}
+
+```
+
