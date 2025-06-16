@@ -3,6 +3,9 @@ title: "Regression modelling"
 author: "bmck"
 date: "2025-06-04"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -10,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 Library
+
 ```{r}
 library(glmnet)
 library(stargazer)
@@ -22,9 +26,12 @@ library(emmeans)
 
 ## Purpose
 
-This document will run through modelling to test the change in the relationship between trust in the UK Parliament and trust in the EU parliament within the UK. 
+This document will run through modelling to test the change in the
+relationship between trust in the UK Parliament and trust in the EU
+parliament within the UK.
 
-We will run our other scripts to generate our clean GB dataset for modelling. This comes from these scripts. 
+We will run our other scripts to generate our clean GB dataset for
+modelling. This comes from these scripts.
 
 ```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 knitr::purl("Multivariate analysis and var cleaning.Rmd", output = "temp_data_prep.R")
@@ -41,55 +48,74 @@ rm(convert_10pt_3pt, extreme_trust, # functions
    )
 ```
 
-Additionally, the analysis includes the "Difference-in-difference.Rmd" script. But this is not required to be run for this analysis. Our main dataframe to use for analysis is "gb_clean" which includes: 
-- GB only information from the ESS survey
-- Information from Round 5 to 11 of the survey. 
-- Cleaned variables and recoded demographic levels from the `Multivariate analysis and var cleaning.Rmd` script
+Additionally, the analysis includes the "Difference-in-difference.Rmd"
+script. But this is not required to be run for this analysis. Our main
+dataframe to use for analysis is "gb_clean" which includes: - GB only
+information from the ESS survey - Information from Round 5 to 11 of the
+survey. - Cleaned variables and recoded demographic levels from the
+`Multivariate analysis and var cleaning.Rmd` script
 
+## Modelling approach.
 
-## Modelling approach. 
+This script will include multiple models to find the best model. The
+approaches will include:
 
-This script will include multiple models to find the best model. The approaches will include: 
+1.  Creating the target variable for relationship between trust_europ
+    (EU Parl) and trust_parliament (local GB Parl)
+    a)  test with a difference value (trust_europ - trust_parliament)
+    b)  test with a ratio (trust_europ / trust_parliament)
 
-1. Creating the target variable for relationship between trust_europ (EU Parl) and trust_parliament (local GB Parl)
-    a) test with a difference value (trust_europ - trust_parliament)
-    b) test with a ratio (trust_europ / trust_parliament)
+Based on some literature, a raw difference value is preferred because it
+is easier to interpret. However some recommend a ratio, so we will test
+both to check the distribution and conduct basic
 
-Based on some literature, a raw difference value is preferred because it is easier to interpret. However some recommend a ratio, so we will test both to check the distribution and conduct basic 
+2.  Run multiple regression models for:
+    -   null model
+    -   full model
+    -   regularized model (with lasso)
+    -   with and without interaction terms for time.
 
-2. Run multiple regression models for:
-    - null model
-    - full model
-    - regularized model (with lasso) 
-    - with and without interaction terms for time. 
+<!-- -->
 
-  a) treating target variable as continuous (family = gaussian)
-  b) treating target variable as ordinal (family = XXX)
-  
+a)  treating target variable as continuous (family = gaussian)
+b)  treating target variable as ordinal (family = XXX)
 
-We will compare the model interpretations and decide which approach to take forward. Checking modelling outcome for treating trust as a continuous or ordinal variable:
+We will compare the model interpretations and decide which approach to
+take forward. Checking modelling outcome for treating trust as a
+continuous or ordinal variable:
 
-~~~~ TBC IF THIS HAPPENS -> USE SOME ML SUPERVISED LEARNING ~~~~
-3. Run the target variable in some supervised learning ML models. 
-  - test K-means, RF and 
+\~\~\~\~ TBC IF THIS HAPPENS -\> USE SOME ML SUPERVISED LEARNING
+\~\~\~\~ 3. Run the target variable in some supervised learning ML
+models. - test K-means, RF and
 
-4. Run model to look at connection between anti-local Government and pro-EU. 
-  - We use R11 data to target the variable 
-  vteubcmb - Would vote for [country] to become member of European Union or remain outside
- https://ess.sikt.no/en/datafile/242aaa39-3bbb-40f5-98bf-bfb1ce53d8ef?tab=1&elems=01e8a05c-aad0-41f2-8e4c-6d0f98dee44b_1
-  - Create summary stacked bar plots for each level of support for local government against trust in EU. 
-  - 
-  
-**ALL MODELS WILL USE ANWEIGHT TO ADJUST THE OUTPUTS.**
-  - Because of this, modelling is conducted through surveyglm functions within the glm package. 
+4.  Run model to look at connection between anti-local Government and
+    pro-EU.
 
-#### Uncertainties and assumptions: 
-1. Considering interaction effects: 
-  - do we treat as linear or a factor? I think factor makes more sense as over the time period there are too many changes to consider a linear relationship. 
+-   We use R11 data to target the variable vteubcmb - Would vote for
+    [country] to become member of European Union or remain outside
+    <https://ess.sikt.no/en/datafile/242aaa39-3bbb-40f5-98bf-bfb1ce53d8ef?tab=1&elems=01e8a05c-aad0-41f2-8e4c-6d0f98dee44b_1>
+-   Create summary stacked bar plots for each level of support for local
+    government against trust in EU.
+-   
+
+**ALL MODELS WILL USE ANWEIGHT TO ADJUST THE OUTPUTS.** - Because of
+this, modelling is conducted through surveyglm functions within the glm
+package.
+
+#### Uncertainties and assumptions:
+
+1.  Considering interaction effects:
+
+-   do we treat as linear or a factor? I think factor makes more sense
+    as over the time period there are too many changes to consider a
+    linear relationship.
 
 ### Prepare our GB dataset
 
-Limit the data to only round 8 onwards. As we saw in the DiD the effects are not significant, we are focussed on just the interaction between these 2 variables and how euroscepticism has changed in the UK since the Referendum. 
+Limit the data to only round 8 onwards. As we saw in the DiD the effects
+are not significant, we are focussed on just the interaction between
+these 2 variables and how euroscepticism has changed in the UK since the
+Referendum.
 
 ```{r}
 gb_clean_regress <- gb_clean |> 
@@ -102,11 +128,13 @@ gb_clean_regress |> group_by(essround) |> summarise(total_na = sum(is.na(ethnic_
 #convert round to factor 
 gb_clean_regress <- gb_clean_regress |> mutate(essround = as_factor(essround))
 ```
-  
+
 #### Add in our target variable(s)
 
-Create both raw difference and ratio calculation.
-We use trust EU as the first value/ numerator as our hypothesis is that this value increases over time, we will 
+Create both raw difference and ratio calculation. We use trust EU as the
+first value/ numerator as our hypothesis is that this value increases
+over time, we will
+
 ```{r}
 
 gb_clean_regress |> plot_missing()
@@ -114,12 +142,13 @@ gb_clean_regress |> plot_missing()
 
 ```
 
-### Test target variables - raw diff and ratio 
+### Test target variables - raw diff and ratio
 
-Create the 2 variables. 
+Create the 2 variables.
 
-target_diff = trust_europ - trust_parliament 
-target_ratio = trust_europ / trust_europ (but incl +0.1 for each trust value if == 0 to avoid errors and negation. )
+target_diff = trust_europ - trust_parliament target_ratio = trust_europ
+/ trust_europ (but incl +0.1 for each trust value if == 0 to avoid
+errors and negation. )
 
 ```{r}
 gb_clean_regress <- gb_clean_regress |> 
@@ -133,7 +162,24 @@ gb_clean_regress |> select(target_diff, target_ratio, target_ratiolog) |> plot_h
 gb_clean_regress |> select(target_diff, target_ratio, target_ratiolog) |> summary()
 
 ```
-Check correlations for interpretations: 
+
+And plot more nicely for the report:
+
+```{r}
+gb_clean_regress |> 
+  group_by(essround, target_diff) |> 
+  summarise(obs = n()) |> 
+  ggplot(aes(x=target_diff, y = obs, group = essround, colour = essround))+
+  geom_line()
+
+final_data_regress |> 
+  group_by(essround) |> count()
+
+gb_clean |> group_by(essround) |> count()
+ess_data |> filter(cntry == "GB") |> group_by(essround) |> count()
+```
+
+Check correlations for interpretations:
 
 ```{r}
 # plot correlations:
@@ -150,14 +196,16 @@ sjPlot::plot_scatter(gb_clean_regress$target_diff,
                      gb_clean_regress$target_ratiolog)
 ```
 
-We see that the raw ratio is least useful. 
-We decide between either the log of the ratio or the straight difference. 
-The log ratio would allow us to model a continuous target variable but is less interpretable. If we are only concerned with the direction of the trend however, this is ok. 
+We see that the raw ratio is least useful. We decide between either the
+log of the ratio or the straight difference. The log ratio would allow
+us to model a continuous target variable but is less interpretable. If
+we are only concerned with the direction of the trend however, this is
+ok.
 
+### Modelling of EU trust
 
-### Modelling of EU trust 
-
-Using the already run ESS data and selecting a subset, we test our drivers of trust in european parliament as the target. 
+Using the already run ESS data and selecting a subset, we test our
+drivers of trust in european parliament as the target.
 
 ### Model raw target difference
 
@@ -199,7 +247,8 @@ summary(full_model)
 
 ```
 
-Print results with stargazer for each model: 
+Print results with stargazer for each model:
+
 ```{r}
 stargazer(null_model, base_time_model, full_model,
           type = "text", # "text" for console, "html" for web, "latex" for LaTeX
@@ -261,7 +310,8 @@ summary(full_model)
 
 ```
 
-Print results with stargazer for each model: 
+Print results with stargazer for each model:
+
 ```{r}
 stargazer(null_model, base_time_model, full_model,
           type = "text", # "text" for console, "html" for web, "latex" for LaTeX
@@ -285,7 +335,8 @@ tibble(broom::tidy(full_model) |>
 
 ### Model ratio log target as continous
 
-Model the ratio of trustEU / trustUK parliaments that has been logged as continuous variable:
+Model the ratio of trustEU / trustUK parliaments that has been logged as
+continuous variable:
 
 ```{r}
 
@@ -323,7 +374,8 @@ AIC(full_model)
   
 ```
 
-Print results with stargazer for each model: 
+Print results with stargazer for each model:
+
 ```{r}
 stargazer(null_model, base_time_model, full_model,
           type = "text", # "text" for console, "html" for web, "latex" for LaTeX
@@ -346,22 +398,19 @@ tibble(broom::tidy(full_model) |>
 
 ```
 
-We see that the full model misses many observations due to missing values. We need to adress this before finalising the model. 
+We see that the full model misses many observations due to missing
+values. We need to adress this before finalising the model.
 
-But the full model appears significantly better with it's lower AIC. Also we see that many of the variables have a statistically signficant relationship with trust in EU Parliament: 
-More likely to trust EU Parliament include: 
-    - Feeling less attached to the UK
-    - Low economic satisfaction
-    - Being Female
-    - Having more left leaning views 
+But the full model appears significantly better with it's lower AIC.
+Also we see that many of the variables have a statistically signficant
+relationship with trust in EU Parliament: More likely to trust EU
+Parliament include: - Feeling less attached to the UK - Low economic
+satisfaction - Being Female - Having more left leaning views
 
-While more lower trust in EU Parliament include: 
-    - Being older
-    - Having less support for immigants
+While more lower trust in EU Parliament include: - Being older - Having
+less support for immigants
 
-#### Compare the outcomes. 
-
-
+#### Compare the outcomes.
 
 ### Model raw target difference
 
@@ -400,7 +449,8 @@ summary(full_model)
 
 ```
 
-Print results with stargazer for each model: 
+Print results with stargazer for each model:
+
 ```{r}
 stargazer(null_model, base_time_model, full_model,
           type = "text", # "text" for console, "html" for web, "latex" for LaTeX
@@ -424,7 +474,8 @@ tibble(broom::tidy(full_model) |>
 
 ## Imputing missing values:
 
-Here we check the distribution of missing values and try to apply imputation for those variables we can complete. 
+Here we check the distribution of missing values and try to apply
+imputation for those variables we can complete.
 
 ```{r}
 gb_clean_regress |> 
@@ -435,7 +486,7 @@ gb_clean_regress <- gb_clean_regress |>
   select(-ethnic_minority) 
 ```
 
-Standardise all variables to factors: 
+Standardise all variables to factors:
 
 ```{r}
 # and make polintr binary for the imputation 
@@ -452,7 +503,6 @@ gb_clean_regress <- gb_clean_regress |>
 str(gb_clean_regress)
 
 ```
-
 
 Now we impute the remaining values with mice:
 
@@ -471,7 +521,7 @@ imputed_data <- mice(imputation_data, m = 1, seed=1234)
 summary(imputed_data)
 ```
 
-Now join together the final datasets and check for any remaining NA's. 
+Now join together the final datasets and check for any remaining NA's.
 
 ```{r}
 # join all the imputations and check we don't have any NA's
@@ -481,9 +531,10 @@ colSums(is.na(final_data))
 
 ```
 
-Now join back our target variables and weights. We just join the target variables:
+Now join back our target variables and weights. We just join the target
+variables:
 
-Importantly, we drop the NA values 
+Importantly, we drop the NA values
 
 ```{r}
 final_data_regress <- final_data |> 
@@ -502,8 +553,9 @@ summary(final_data_regress)
 
 ### Lasso model with imputed data
 
-We still have 529 missing values in our target variables for difference and ratio over the 4 rounds. 
-But this is fine. We can continue modelling. 
+We still have 529 missing values in our target variables for difference
+and ratio over the 4 rounds. But this is fine. We can continue
+modelling.
 
 ```{r}
 final_data_regress |> plot_missing()
@@ -515,11 +567,14 @@ final_data_regress <- final_data_regress |>
 
 ## Regularisation on the model - lasso
 
-We use the weights function within glmnet here rather than a survey object to support our anweight. This is actually fine and gives the same output because we haven't considered the stratification or psu. 
+We use the weights function within glmnet here rather than a survey
+object to support our anweight. This is actually fine and gives the same
+output because we haven't considered the stratification or psu.
 
 ### testing with raw difference variable
 
-Change all columns to dummies to run the lasso. This is required to run the lasso cross validation and run. 
+Change all columns to dummies to run the lasso. This is required to run
+the lasso cross validation and run.
 
 ```{r}
 # select cols to dummify
@@ -541,7 +596,8 @@ data_with_dummies <- dummy_cols(
 
 ```
 
-1. Setup the x and y matrix to call for cross validation lasso modelling. 
+1.  Setup the x and y matrix to call for cross validation lasso
+    modelling.
 
 ```{r}
 # Prepare the response variable (y), the variable matrix and weights 
@@ -552,10 +608,11 @@ x_lasso <- data_with_dummies |> select(-target_diff, -target_ratiolog, -trust_eu
 anweight_vector <- data_with_dummies$anweight
 ```
 
+2.  Run the cross-validation lasso
 
-2. Run the cross-validation lasso
+<!-- -->
 
-a) on the raw difference target variable. 
+a)  on the raw difference target variable.
 
 ```{r}
 # for reproducibility
@@ -572,7 +629,7 @@ cv_lasso_model <- cv.glmnet(
 plot(cv_lasso_model)
 ```
 
-Check the outputs with the minimum lamda. 
+Check the outputs with the minimum lamda.
 
 ```{r}
 # Get the coefficients at the optimal lambda (lambda.min)
@@ -589,7 +646,8 @@ model_lasso_lamdamin <- glmnet(
 )
 ```
 
-Check the output with the lamda that provides the simplest lamda for simplest model within 1 standard deviation of the minimum value. 
+Check the output with the lamda that provides the simplest lamda for
+simplest model within 1 standard deviation of the minimum value.
 
 ```{r}
 # Or at lambda.1se (more regularized, often preferred)
@@ -606,7 +664,8 @@ model_lasso_lamda1se <- glmnet(
 )
 ```
 
-Now extract the coefficients for both. 
+Now extract the coefficients for both.
+
 ```{r}
 # Extract coefficients for min
 coefs_lamdamin <- as.matrix(coef(model_lasso_lamdamin)) |> 
@@ -625,30 +684,24 @@ lasso_summary_raw <- coefs_lamdamin |> left_join(coefs_lamda1se) |>
 lasso_summary_raw
 ```
 
-From this model we can see that our significant variables to include are: 
+From this model we can see that our significant variables to include
+are:
 
-Ess Round
-Gender
-Age 
-Left/Right political
-Satisfaction with economy
-Support for immigrants
-Attachment to country
-Post political content online
+Ess Round Gender Age Left/Right political Satisfaction with economy
+Support for immigrants Attachment to country Post political content
+online
 
-Education (in larger model only)
-Income stress (in larger model only)
-Area type (in larger model only)
-Health/disability (in larger model only)
-Political Interest (larger only)
-life satisfaction (larger only)
+Education (in larger model only) Income stress (in larger model only)
+Area type (in larger model only) Health/disability (in larger model
+only) Political Interest (larger only) life satisfaction (larger only)
 Daily internet user (larger only)
 
-We see that the lamda minimum includes ALL variables. Thus we run the lamda at 1se as our lasso model. 
+We see that the lamda minimum includes ALL variables. Thus we run the
+lamda at 1se as our lasso model.
 
 `trust_diff = essround + gender + age_rec + left_right + econ_sat + immig_support + country_attach + post_polonline`
 
-#### Check Lasso with the ratio target variable: 
+#### Check Lasso with the ratio target variable:
 
 ```{r}
 #update target 
@@ -705,17 +758,18 @@ lasso_summary_ratio
 
 
 ```
-In this model we see the lamda min value still includes all values. 
 
-The lamda 1se model is similar: With daily netuse included as the only change. 
-essround, gender, age, left_right, econ_sat, immig_support, daily_netuse, country_attach, post_polonline
+In this model we see the lamda min value still includes all values.
 
-### Final variable selection: 
+The lamda 1se model is similar: With daily netuse included as the only
+change. essround, gender, age, left_right, econ_sat, immig_support,
+daily_netuse, country_attach, post_polonline
+
+### Final variable selection:
 
 Then we create a function for our regularisation model: We test
 
-
-## Running models - Models with raw difference target: 
+## Running models - Models with raw difference target:
 
 Run each model: null, base(time), full model, regularised model
 
@@ -748,11 +802,9 @@ model_reg_raw <- glm(target_diff ~ essround + gender + age_rec + left_right + ec
 summary(model_full_raw)
 ```
 
-### Model evaluation 
+### Model evaluation
 
-Now we compare the outputs: 
-  a) AIC and BIC
-  b) anova measures
+Now we compare the outputs: a) AIC and BIC b) anova measures
 
 ```{r}
 ## First we compare the AIC and BIC: 
@@ -761,9 +813,10 @@ BIC(model_null_raw, model_time_raw, model_full_raw, model_reg_raw, model_reg_raw
 
 ```
 
-We see the regularised model performs best. The one without netuse included: 
+We see the regularised model performs best. The one without netuse
+included:
 
-Now we compare each level of nested model: 
+Now we compare each level of nested model:
 
 ```{r}
 # Compare Null vs. Time
@@ -777,9 +830,12 @@ anova(model_reg_raw2, model_full_raw, test = "Chisq")
 
 ```
 
-The anova indicates that the more complex model (the second one listed) provides a statistically significant improvement in fit over the simpler model (the first one). However the AIC indicates the simpler regularised model is best. 
+The anova indicates that the more complex model (the second one listed)
+provides a statistically significant improvement in fit over the simpler
+model (the first one). However the AIC indicates the simpler regularised
+model is best.
 
-Now display to compare models with modelsummary: 
+Now display to compare models with modelsummary:
 
 ```{r}
 
@@ -796,27 +852,30 @@ modelsummary(
 
 ```
 
-We select the regularised model as the best. It is observed that the following variables are significant: 
+We select the regularised model as the best. It is observed that the
+following variables are significant:
+
 ```{r}
 summary(model_reg_raw)
 ```
 
-The following are statistically significantly associated with increased relative support for EU parliament to the UK parliament: 
-    
-    Time, ESS round 10 and 11 all had signficantly higher support than Round 8. 
-    Being female.
-    Being <20 years old (compared to all other age groups. 1+ point relative support more than 65+ )
-    Being left leaning politically (including +1.5 points more relative EU support than right leaning people)
-    Being dissatisfied with the economy (+1.2 points relative support more than people satisfied with the economy)
-    Supporting immigration (+0.93 points compared to those with low immigrant sentiment)
-    Having low attachment to the UK (+1.1 points compared to high attachment)
-    Posting political content online (+0.3 points to those who don't)
-    
+The following are statistically significantly associated with increased
+relative support for EU parliament to the UK parliament:
 
+```         
+Time, ESS round 10 and 11 all had signficantly higher support than Round 8. 
+Being female.
+Being <20 years old (compared to all other age groups. 1+ point relative support more than 65+ )
+Being left leaning politically (including +1.5 points more relative EU support than right leaning people)
+Being dissatisfied with the economy (+1.2 points relative support more than people satisfied with the economy)
+Supporting immigration (+0.93 points compared to those with low immigrant sentiment)
+Having low attachment to the UK (+1.1 points compared to high attachment)
+Posting political content online (+0.3 points to those who don't)
+```
 
-## Modelling the ratio target variable. 
+## Modelling the ratio target variable.
 
-### Running models - ratio difference target: 
+### Running models - ratio difference target:
 
 Run each model: null, base(time), full model, regularised model
 
@@ -850,9 +909,7 @@ model_reg_ratio <- glm(target_ratiolog ~ essround + gender + age_rec + left_righ
 
 ### Model evaluation (ratios)
 
-Now we compare the outputs: 
-  a) AIC and BIC
-  b) anova measures
+Now we compare the outputs: a) AIC and BIC b) anova measures
 
 ```{r}
 ## First we compare the AIC and BIC: 
@@ -861,9 +918,10 @@ BIC(model_null_ratio, model_time_ratio, model_full_ratio, model_reg_ratio)
 
 ```
 
-We see that the regularised model is the best fit with both AIC and BIC. 
+We see that the regularised model is the best fit with both AIC and BIC.
 
 And the nested model comparisons with Anova
+
 ```{r}
 # Compare Null vs. Time
 anova(model_null_ratio, model_time_ratio, test = "Chisq") # "Chisq" for GLMs
@@ -876,9 +934,11 @@ anova(model_reg_ratio, model_full_ratio, test = "Chisq")
 
 ```
 
-Again, the anova estimates the full model is an improvemnet on the regularised model. The residual deviation is comparable so we prefer the simplified model for interpretation and simplicity. 
+Again, the anova estimates the full model is an improvemnet on the
+regularised model. The residual deviation is comparable so we prefer the
+simplified model for interpretation and simplicity.
 
-Now display to compare models with modelsummary: 
+Now display to compare models with modelsummary:
 
 ```{r}
 modelsummary(
@@ -894,16 +954,19 @@ modelsummary(
 
 ```
 
-We also see that daily net use isn't significant in this ratio model. 
+We also see that daily net use isn't significant in this ratio model.
 
-Otherwise the trends are identical. 
+Otherwise the trends are identical.
 
 ##### Interpreting the ratio model outputs:
 
-Interpreting the ratios outputs: 
-We need to take the exponential of the estimate, given our estimate is log(trustEU / trustUK). 
+Interpreting the ratios outputs: We need to take the exponential of the
+estimate, given our estimate is log(trustEU / trustUK).
 
-Where for example, being female [estimate = 0.20 with exp(estimate) = 1.22]. This can also be stated as: Being female is associated with a 22.51% higher ratio of trust in the EU Parliament to UK parliament compared to being male, holding other factors constant.
+Where for example, being female [estimate = 0.20 with exp(estimate) =
+1.22]. This can also be stated as: Being female is associated with a
+22.51% higher ratio of trust in the EU Parliament to UK parliament
+compared to being male, holding other factors constant.
 
 ```{r}
 # use broom to add exponential and print interpretation column. 
@@ -918,16 +981,19 @@ broom::tidy(model_reg_ratio) |>
 
 ```
 
+## Models with interaction terms:
 
-## Models with interaction terms: 
+#### Modelling with time (essround) as a factor
 
-#### Modelling with time (essround) as a factor 
-With this interaction, we compare the interaction terms to a base period which is unreported e.g. for essround10:left_rightModerate (4-6) AND essround11:left_rightRight (7-10), the base group will be the unreported value: which is essround8:left_rightLeft (0-3)
+With this interaction, we compare the interaction terms to a base period
+which is unreported e.g. for essround10:left_rightModerate (4-6) AND
+essround11:left_rightRight (7-10), the base group will be the unreported
+value: which is essround8:left_rightLeft (0-3)
 
-Select variables that we want to target that are are most associated with the "remain" voters to see if their opinions have intensified: 
-- country_attachment -> for britishness
-- Immigration_support -> for anti-immigrant sentiment 
-- Left-right -> for political positioning 
+Select variables that we want to target that are are most associated
+with the "remain" voters to see if their opinions have intensified: -
+country_attachment -\> for britishness - Immigration_support -\> for
+anti-immigrant sentiment - Left-right -\> for political positioning
 
 ```{r}
 ## Regularised model WITH interactions 
@@ -941,27 +1007,43 @@ summary(model_regint_raw)
 broom::tidy(model_regint_raw) |> 
   mutate(sig5pct = ifelse(p.value < 0.05, "YES", "no"),
          .after = estimate)
-```
 
-With raw values, we see that some of the interaction terms are signficant: 
 
-Immigration support: baseline group = High support in Round 8
-    essround10:immig_supportModerate (est = -0.6) 
-    essround11:immig_supportModerate (est = -0.44)
-    essround11:immig_supportLow	(est = -0.49)
-
-Attachment to country: baseline = High attachment to UK in Round 8. 
-    essround11:country_attachModerate	(est = -0.37)
-    essround10:country_attachLow (est = +0.66)
-    essround11:country_attachLow	(est = +0.51)
-
-```{r}
-# and for ratio interactions 
-model_regint_ratio <- glm(target_ratiolog ~ essround + gender + age_rec + left_right*essround + econ_sat + 
+model_regint_raw2 <- glm(target_diff ~ essround + essround + age_rec*essround + left_right*essround + econ_sat + 
       immig_support*essround + country_attach*essround + post_polonline,
     data = final_data_regress,
     weights = anweight,
     family = "gaussian")
+summary(model_regint_raw2)
+
+broom::tidy(model_regint_raw2) |> 
+  mutate(sig5pct = ifelse(p.value < 0.05, "YES", "no"),
+         .after = estimate)
+
+AIC(model_regint_raw, model_regint_raw2)
+```
+
+With raw values, we see that some of the interaction terms are
+signficant:
+
+Immigration support: baseline group = High support in Round 8
+essround10:immig_supportModerate (est = -0.6)
+essround11:immig_supportModerate (est = -0.44)
+essround11:immig_supportLow (est = -0.49)
+
+Attachment to country: baseline = High attachment to UK in Round 8.
+essround11:country_attachModerate (est = -0.37)
+essround10:country_attachLow (est = +0.66) essround11:country_attachLow
+(est = +0.51)
+
+```{r}
+# and for ratio interactions 
+model_regint_ratio <- glm(target_ratiolog ~ essround + gender*essround + age_rec*essround + left_right*essround + econ_sat*essround + 
+      immig_support*essround + country_attach*essround + post_polonline*essround,
+    data = final_data_regress,
+    weights = anweight,
+    family = "gaussian")
+summary(model_regint_ratio)
 
 broom::tidy(model_regint_ratio) |> 
   mutate(exp_estimate = exp(estimate),
@@ -970,15 +1052,161 @@ broom::tidy(model_regint_ratio) |>
                                  glue("+{round((exp_estimate-1)*100,2)}%")),
          sig5pct = ifelse(p.value < 0.05, "YES", "no"),
          .after = estimate)
+
+# and for ratio interactions 
+model_regint_ratio2 <- glm(target_ratiolog ~ essround + gender + age_rec*essround + left_right + econ_sat + 
+      immig_support*essround + daily_netuse + country_attach*essround + post_polonline,
+    data = final_data_regress,
+    weights = anweight,
+    family = "gaussian")
+
+broom::tidy(model_regint_ratio2) |> 
+  mutate(exp_estimate = exp(estimate),
+         interpretation = ifelse(exp_estimate<1,
+                                 glue("{round((exp_estimate-1)*100,2)}%"),
+                                 glue("+{round((exp_estimate-1)*100,2)}%")),
+         sig5pct = ifelse(p.value < 0.05, "YES", "no"),
+         .after = estimate)
+
+
+### MODEL PERFORMANCE EVALUATION - COMPARING INTERACTION TERMS. 
+AIC(model_regint_ratio, model_regint_ratio2)
+modelsummary(
+  list("Regularised" = model_reg_ratio,
+       "Interaction terms" = model_regint_ratio,
+       "Select interaction terms" = model_regint_ratio2),
+  metrics = c("AIC", "BIC", "RMSE", "R2"), # R2 might be pseudo R2 for GLM
+  gof_map = c("nobs", "aic", "bic"), # You can customize which GOF statistics to show
+  stars = TRUE, # Add significance stars
+  title = "Comparison of GLM Models with Weights"
+)
 ```
 
+We see in the full interaction model that many variables are not
+increasing over time.
+
+Not significant differences over time: \_ left right, gender
+
+Yes differences over time: - age groups, immigration support, country
+attachment.
+
+In the regularised model, we are testing the slopes and see these
+differences between groups: Baseline = R8 value for all. SIGNIFICANT
+VALUES: AGE: Baseline = \<20 trend \* essround10:age_rec30-44 -\> +
+80.52% \* essround10:age_rec\>=65 -\> + 82.61% \*
+essround11:age_rec\>=65 -\> + 72.08%
+
+IMMIG: Baseline = Support High \* essround10:immig_supportModerate -\>
+-20.61%
+
+COUNTRY ATTACHMENT: Baseline = High \* essround10:country_attachLow
+-\> + 59.19% \* essround11:country_attachLow -\> + 67.21% \## FINAL
+MODEL OUTPUTS FOR REPORT \### Create summary tables for appendix of the
+4 models.
+
+```{r}
+anova(model_reg_ratio, model_regint_ratio2)
+
+modelsummary(
+  list("Null model" = model_null_ratio,
+       "Time model" = model_time_ratio,
+       "Regularised main effects" = model_reg_ratio,
+       "Regularised interaction terms" = model_regint_ratio2),
+  metrics = c("AIC", "BIC", "RMSE", "R2"), # R2 might be pseudo R2 for GLM
+  gof_map = c("nobs", "aic", "bic"), # You can customize which GOF statistics to show
+  stars = TRUE, # Add significance stars
+  title = "Comparison of GLM Models with Weights"
+)
+```
+
+### Plot main effects and interaction term marginal effects
+
+Plot main effects with both ggeffects and sjPlot, model =
+model_regint_ratio
+
+```{r}
+jtools::summ(model_reg_ratio, exp = TRUE)
+jtools::plot_summs(model_reg_ratio, scale=TRUE, exp = TRUE)+
+  labs(x="Multiplicative Change in Trust Ratio (trustEU/trustUK)")+
+  scale_x_continuous(breaks = seq(0.5, 2, 0.5),
+                     limits = c(0.4, 2.1))
+
+```
+
+\
+If we don't use the interaction model, the predicted values are always
+going to be equal between groups. We need to use the interaction term
+model to view the changes over time.
+
+```{r}
+
+sjPlot::plot_model(model_reg_ratio, 
+           type = "pred",
+           terms = c("essround", "left_right"),
+    #        terms = c("essround", "gender", "age_rec", "left_right", 
+    # "econ_sat", "immig_support", "daily_netuse", "country_attach", 
+    # "post_polonline"),
+           transform = "exp")+
+  theme_minimal()
+
+## plotting age group marginal effects over time
+plot_age <- sjPlot::plot_model(model_regint_ratio, 
+           type = "pred",
+           terms = c("essround", "age_rec"),
+           transform = "exp",
+           dot.size = 4,
+           line.size = 1)+
+  theme_minimal()+
+  geom_hline(yintercept = 0)+
+  labs(title = "Predicted trust ratio by age group, over time",
+       y = "Predicted trust ratio",
+       x = "ESS round",
+       colour = "Age group")+
+  geom_line(linewidth=2, alpha=0.5)+
+  geom_line(linewidth=2, alpha=0.5)+lims(y=c(-1.3, 0.75))
+
+## plotting immigration attitudes 
+plot_immig <- sjPlot::plot_model(model_regint_ratio, 
+           type = "pred",
+           terms = c("essround", "immig_support"),
+           transform = "exp",
+           dot.size = 4,
+           line.size = 1)+
+  theme_minimal()+
+  geom_hline(yintercept = 0)+
+  labs(title = "Predicted trust ratio by immigration support level, over time",
+       y = "Predicted trust ratio",
+       x = "ESS round",
+       colour = "Immigration support:")+
+  geom_line(linewidth=2, alpha=0.5)+lims(y=c(-1.3, 0.75))
+
+cowplot::plot_grid(plot_age, plot_immig)
+cowplot::plot_grid(plot_age, plot_immig,nrow = 2)
+
+```
+
+## Write output tables - using jtools
+
+Testing jtools outputs instead of performancesummary. Prefer the overall
+summary statistics from this package although it does run slower.
+
+```{r}
+# export the ratio model table to excel.
+jtools::export_summs(model_null_ratio,model_time_ratio, model_reg_ratio, model_regint_ratio2, model_full_ratio,
+                     to.file = "xlsx", file.name = "ratio_model_outputs.xlsx")
+
+jtools::export_summs(model_null_raw, model_time_raw, model_reg_raw, model_regint_raw2, model_full_raw,
+                     to.file = "xlsx", file.name = "raw_diff_model_outputs.xlsx")
+
+
+
+```
 
 ## Plot each subgroup to view trends over time:
 
+#### With raw difference target variable:
 
-#### With raw difference target variable: 
-
-Plot to check what some of the key interaction term variables look like. 
+Plot to check what some of the key interaction term variables look like.
 
 ```{r}
 # create function to run through and plot: 
@@ -1008,11 +1236,15 @@ for (variable in demog_covars) {
 
 
 ```
-In these plots the predicted diff 0.0 is the value target_diff = 0, i.e. trust_europ == trust_parliament (equal trust in UK and EU parliament)
+
+In these plots the predicted diff 0.0 is the value target_diff = 0, i.e.
+trust_europ == trust_parliament (equal trust in UK and EU parliament)
 
 ## Plots of the ratio models over time
 
-Caution: These ratio models are more computationally expensive and returned errors sometimes.  (we can refer to the raw difference anyway as the trends should be similar)
+Caution: These ratio models are more computationally expensive and
+returned errors sometimes. (we can refer to the raw difference anyway as
+the trends should be similar)
 
 ```{r}
 for (variable in demog_covars) {
@@ -1021,12 +1253,16 @@ for (variable in demog_covars) {
 
 ```
 
-
 ### Testing modelling time (essround) as a continuous varible
-NOTE: THIS METHOD IS NOT PREFERRED. WE TRIALLED BUT BECAUSE THERE IS TOO MUCH VOLATILITY IN POLITICAL TRUST, WE CANNOT ASSUME THERE IS A LINEAR RELATIONSHIP. 
 
-Treating time as continuous will allow us to see the linear trends of the interactions as time is not set to the baseline but additive. 
-first we relabel the time variable so that essround becomes time with Round 8 = 0 and R9=1,R10=2, R11=3.
+NOTE: THIS METHOD IS NOT PREFERRED. WE TRIALLED BUT BECAUSE THERE IS TOO
+MUCH VOLATILITY IN POLITICAL TRUST, WE CANNOT ASSUME THERE IS A LINEAR
+RELATIONSHIP.
+
+Treating time as continuous will allow us to see the linear trends of
+the interactions as time is not set to the baseline but additive. first
+we relabel the time variable so that essround becomes time with Round 8
+= 0 and R9=1,R10=2, R11=3.
 
 ```{r}
 # numeric values embedded in ESSround = essround8 = 1, R9=2... So we just subtract 1 to each value. 
@@ -1051,16 +1287,17 @@ summary(model_regintc_raw)
 
 ```
 
-We see that with the time value as a continuous variable, we see these variables are significant: 
-      time:immig_supportModerate (-0.19)
-      time:immig_supportLow (est = -0.16)
-      time:country_attachLow (est = +0.19) --> Baseline group = R8 High
-
+We see that with the time value as a continuous variable, we see these
+variables are significant: time:immig_supportModerate (-0.19)
+time:immig_supportLow (est = -0.16) time:country_attachLow (est = +0.19)
+--\> Baseline group = R8 High
 
 ### Extracting all values for the subgroups over time to plot
 
-Again we can use emmeans, but to just get all the values then plot separately. 
-Here we want to make a plot to show the changes in each value over time, to show that each group is increasing (as we saw in the actual individual plots above)
+Again we can use emmeans, but to just get all the values then plot
+separately. Here we want to make a plot to show the changes in each
+value over time, to show that each group is increasing (as we saw in the
+actual individual plots above)
 
 ```{r}
 combined_formula_str <- paste("~", paste(demog_covars, collapse = " * "))
@@ -1097,7 +1334,9 @@ for (variable in demog_covars) {
 
 ```
 
-Adjust the function above to create the estimated marginal means for each subgroup that interact with time. From this, we can plot the variables to see which trends are time based. 
+Adjust the function above to create the estimated marginal means for
+each subgroup that interact with time. From this, we can plot the
+variables to see which trends are time based.
 
 ```{r}
 # adjust function with emmeans to return object (requires demog_covar from above)
@@ -1128,7 +1367,7 @@ plot_data_marginals <- final_combined_marginal_data |>
 
 ```
 
-Now we can plot all these trends. 
+Now we can plot all these trends.
 
 ```{r}
 ggplot(plot_data_marginals, aes(x=essround, y = emmean, group = interaction(covariate, level)))+
@@ -1136,8 +1375,8 @@ ggplot(plot_data_marginals, aes(x=essround, y = emmean, group = interaction(cova
   geom_point()
 ```
 
-
-And we also plot with standardised values. Often it can look nicer and make the trend more clear. 
+And we also plot with standardised values. Often it can look nicer and
+make the trend more clear.
 
 ```{r}
 # to make plotting nicer, we standardise all values to period 8. 
@@ -1153,10 +1392,10 @@ plot_data_marginals_std <- plot_data_marginals |>
 
 ```
 
-~~~~~ NOT SURE ANY OF THIS SUBGROUP BY TIME IS NECESSARY. WE ALREADY HAVE 
-#### Weighted averages over time for each subgroup:
+\~\~\~\~\~ NOT SURE ANY OF THIS SUBGROUP BY TIME IS NECESSARY. WE
+ALREADY HAVE \#### Weighted averages over time for each subgroup:
 
-Check the trends for each variable. 
+Check the trends for each variable.
 
 ```{r}
 svy_design <- svydesign(
@@ -1182,8 +1421,7 @@ weighted_averages_svy_df <- as_tibble(weighted_averages_svy)
 
 ```
 
-
-~~~~~~~~~~~~~~~~~~~~~~~
+\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~\~
 
 ```{r}
 stargazer(null_model, base_model, mod1, mod1_demfact, mod1_allfct,
@@ -1211,19 +1449,17 @@ stargazer(null_model, base_model, mod1, mod1_demfact, mod1_allfct,
 
 ```
 
+### Compare the relationship between EU and local Government trust:
 
-### Compare the relationship between EU and local Government trust: 
+Purpose: - Create a new target variable that is local trust - EU trust.
+[\>0 = more trust locally, \<0 = EU trust] Plot trends over time. Cross
+tabulate.
 
-Purpose: 
-- Create a new target variable that is local trust - EU trust. [>0 = more trust locally, <0 = EU trust]
-Plot trends over time. 
-Cross tabulate. 
+Explain the differences in groups - Regression modelling. OR predictive
+modelling to see if we can identify who have high trust and low trust.
 
-Explain the differences in groups
-- Regression modelling. 
-OR predictive modelling to see if we can identify who have high trust and low trust. 
+First, create the variable:
 
-First, create the variable: 
 ```{r}
 # add variable, +0 means more local trust
 trust_compare_df <- ess_data |> 
@@ -1240,6 +1476,7 @@ trust_compare_df |>
 ```
 
 Correlation
+
 ```{r}
 trust_compare_df |> 
   select(trust_parliament, trust_europ) |> 
@@ -1251,8 +1488,9 @@ trust_compare_df |>
 
 ```
 
-
-We see the NA rates have actually dropped since the Brexit discussion times. In round 5 and 6, people were less sure, now people have stronger views. 
+We see the NA rates have actually dropped since the Brexit discussion
+times. In round 5 and 6, people were less sure, now people have stronger
+views.
 
 ```{r}
 plot_histogram(trust_compare_df$govt_trust_compare, by = essround)
@@ -1289,14 +1527,15 @@ ggplot(trust_compare_df, aes(x = trust_europ, y = govt_trust_compare)) +
 
 ```
 
-Test modelling of difference 
+Test modelling of difference
 
 ```{r}
 m1 <- lm(govt_trust_compare ~ essround, data = trust_compare_df)
 summary(m1)
 ```
 
-It's significant negative relationship showing there is a shift towards european parliament over time: 
+It's significant negative relationship showing there is a shift towards
+european parliament over time:
 
 ```{r}
 
@@ -1318,7 +1557,6 @@ trust_compare_df |>
 
 ```
 
-
 Compare individual level trends:
 
 ```{r}
@@ -1334,9 +1572,10 @@ ess_data |>
   geom_smooth(method = "loess", se = TRUE, color = "red", alpha=0.5) 
 ```
 
-We see that females have become more trusting in the EU government, while males are more likely to be more trusting of the local Government. 
+We see that females have become more trusting in the EU government,
+while males are more likely to be more trusting of the local Government.
 
-2. Compare trust by type of region:
+2.  Compare trust by type of region:
 
 ```{r}
 # create summary df by gender:
@@ -1356,15 +1595,15 @@ ess_data |>
 
 ```
 
-We see the trends are consistent in shifting towards EU support, but it's strongest in more metropolitan areas. With country areas the least likely. 
-
+We see the trends are consistent in shifting towards EU support, but
+it's strongest in more metropolitan areas. With country areas the least
+likely.
 
 ## Target variable: diff in UK and EU Parliament trust
 
-If we are interested in the relationship between the 2, we can model this as the target variable. 
-We create 2 options: 
-    diff = trust_UK - trust_EU
-    diff_ratio = trust_UK / trust_EU
+If we are interested in the relationship between the 2, we can model
+this as the target variable. We create 2 options: diff = trust_UK -
+trust_EU diff_ratio = trust_UK / trust_EU
 
 ```{r}
 ## use the ess_bivar data created in multivar analysis for now. It has the cleaned demographic variables
@@ -1419,8 +1658,7 @@ anova(m_null, m_null_ratio, m_raw, m_raw_ratio)
 anova(m_null, m_null_ratio)
 ```
 
-
-Without weights: 
+Without weights:
 
 ```{r}
 m_null <- lm(parl_trust_diff ~ 1, 
@@ -1440,11 +1678,13 @@ anova(m_null_ratio, m_raw_ratio)
 
 ```
 
-Looks liek the variables are significant for round 7 and 8 (compared to round 5 base. )
+Looks liek the variables are significant for round 7 and 8 (compared to
+round 5 base. )
 
 ##### Testing basic models of high/low values:
 
 Call the function from univariate analysis script:
+
 ```{r}
 low_high_trust <- function(trust_var) {
   factor(
@@ -1458,9 +1698,9 @@ low_high_trust <- function(trust_var) {
 }
 ```
 
-Now create our trust variables: 
-- high/medium/low categorical
-- binary high use (7+ trust) in European Parliamnet
+Now create our trust variables: - high/medium/low categorical - binary
+high use (7+ trust) in European Parliamnet
+
 ```{r}
 # creates categorical, high, medium or low variable
 ess_regress_test <- ess_regress_test |> 
@@ -1471,7 +1711,7 @@ ess_regress_test <- ess_regress_test |>
 
 ```
 
-Run the models without data. 
+Run the models without data.
 
 ```{r}
 
@@ -1516,7 +1756,10 @@ plot_model(m_raw,
 ```
 
 ##### Test model with some covariates:
-First, test with one covariate (gender) with and without interaction effects.
+
+First, test with one covariate (gender) with and without interaction
+effects.
+
 ```{r}
 m_cov_age <- glm(europ_high ~ factor(essround) + age_rec, 
               data = ess_regress_test,
@@ -1533,8 +1776,6 @@ plot_model(m_cov_age_int,
            show.values = TRUE)
 ```
 
-
-
 ```{r}
 m_full <- glm(europ_high ~ factor(essround) + gender + age_rec + educ_level + income_stress + ethnic_minority + area_type + health_disability +  left_right + polintr_binary + life_sat + econ_sat + immig_support + high_pol_tv, 
               data = ess_regress_test,
@@ -1547,7 +1788,7 @@ plot_model(m_full,
 
 ```
 
-view predicted probabilities of groups we are interested in: 
+view predicted probabilities of groups we are interested in:
 
 ```{r}
 library(ggeffects)
@@ -1572,8 +1813,8 @@ plot(gg.pred)
 
 ```
 
-
-Check if it's overfitted, is the full model better than the null or base time model? 
+Check if it's overfitted, is the full model better than the null or base
+time model?
 
 ```{r}
 anova(m_null, m_raw)
@@ -1587,10 +1828,10 @@ exp(coef(m_full))
 
 ```
 
+### Apply regularisation to the logistic model:
 
-### Apply regularisation to the logistic model: 
-
-Use Lasso as we want to reduce our number of covariates ideally. We know they aren't all useful.
+Use Lasso as we want to reduce our number of covariates ideally. We know
+they aren't all useful.
 
 ```{r}
 
