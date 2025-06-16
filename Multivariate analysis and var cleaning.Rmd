@@ -858,6 +858,9 @@ overall_demog_trust |>
 
 cor(overall_demog_trust$mean.eu,
                  overall_demog_trust$mean.uk)
+cor(plot_data$std.eu,
+                 plot_data$std.uk)
+
 ```
 
 We see a strong positive correlation. This trend is biased as it's all trained on the same data and not independent groups. But it does show that the demographic groups generally have positive correlations with trust in UK and EU. This supports the findings of (Harteveld et al. 2013) that found EU trust is driven by local government trust. 
@@ -991,7 +994,7 @@ ggplot(plot_data) +
   geom_errorbarh(aes(y = level, xmin = std.uk_cilow, xmax = std.uk_cihigh),
                  color = "gray50", height = 0) +
   labs(
-    x = "Weighted Mean of Trust",
+    x = "Below average trust in EU/UK  <<<      |     >>> Above average trust in EU/UK ",
     y = NULL,
     title = "Standardised trust in EU vs UK Parliament by Demographic Group",
     subtitle = "EU = Blue; UK = Orange"
@@ -1006,7 +1009,54 @@ ggplot(plot_data) +
     panel.spacing.y = unit(0.5, "lines")
   ) +
   scale_y_discrete(expand = expansion(add = c(1, 1)),
-                   position = "left")
+                   position = "left") + 
+  geom_vline(xintercept = 0)
+
+```
+Plot a subset for report: 
+
+```{r}
+# Plot subset for smaller report chart
+plot_data |> filter(demog_var %in% c("age_rec", "country_attach", "econ_sat", "immig_support", "left_right")) |> 
+  mutate(
+    demog_var = case_when(
+      demog_var == "age_rec" ~ "Age",
+      demog_var == "country_attach" ~ "UK Attachment",
+      demog_var == "econ_sat" ~ "Economic Satisfaction",
+      demog_var == "immig_support" ~ "Immigration Support",
+      demog_var == "left_right" ~ "L-R Political Scale",
+      TRUE ~ demog_var # This ensures any other values (if they existed and were not filtered) remain unchanged
+    )) |> 
+  ggplot() +
+  # plot eu values
+  geom_point(aes(x = std.eu, y = fct_reorder(level, std.eu)),
+             color = "steelblue", size = 2) + # EU
+  geom_errorbarh(aes(y = level, xmin = std.eu_cilow, xmax = std.eu_cihigh),
+                 color = "gray50", height = 0) +
+  # plot gb values
+  geom_point(aes(x = std.uk, y = level),
+             color = "orange", size = 2) + # UK
+  geom_errorbarh(aes(y = level, xmin = std.uk_cilow, xmax = std.uk_cihigh),
+                 color = "gray50", height = 0) +
+  labs(
+    x = "Below average trust in EU/UK <<<    |    >>> Above average trust in EU/UK    ",
+    y = NULL,
+    title = "Standardised trust in EU vs UK Parliament by Demographic Group",
+    subtitle = "EU = Blue; UK = Orange"
+  ) +
+  theme_minimal() +
+  facet_grid(demog_var ~ ., scales = "free_y", space = "free_y",
+             switch = "y") + # For left-side placement of "strip" label 
+  theme(
+    strip.text.y.left = element_text(angle = 0, face = "bold", hjust = 0), 
+    strip.placement = "outside", 
+    axis.text.y = element_text(size = 10, hjust = 1), 
+    panel.spacing.y = unit(0.5, "lines")
+  ) +
+  scale_y_discrete(expand = expansion(add = c(1, 1)),
+                   position = "left") + 
+  geom_vline(xintercept = 0)
+
 ```
 
 
