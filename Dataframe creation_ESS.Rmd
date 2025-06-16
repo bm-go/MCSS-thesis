@@ -1,8 +1,19 @@
 ---
-title: "Dataframe creation"
+title: "Dataframe creation - ESS survey"
 author: "Bradley McKenzie"
-date: "2025-06-02"
-output: html_document
+date: "June 2025"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+
 ---
 
 ```{r setup, include=FALSE}
@@ -11,7 +22,14 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Purpose
 
-This workbook will read in the ESS data, filter the relevant variables and create a base survey design object that we can use in our analysis. The ESS file I have downloaded is from the ESS DataWizard: https://ess.sikt.no/en/?tab=overview
+This workbook will read in the ESS data, filter the relevant variables and create a base survey design object that we can use in our analysis. The ESS file I have downloaded is from the ESS DataWizard: https://ess.sikt.no/en/?tab=overview. You can download the data manually yourself. For the rounds and questions or countries you like. 
+
+Note: the `essurvey` package doe not work so manually downloading is the easiest option. 
+
+This is a simple script performing the following: 
+- Read in the data
+- Filter to selected variables
+- Perform basic checks on observations by country and round. 
 
 ## Read in libraries
 
@@ -88,6 +106,10 @@ ess_data <- ess_data |>
     brncntr,  #Respondent born in the UK
     blgetmg, # Belong to minority ethnic group in country
     feethngr, # Feel part of same race or ethnic group as most people in country
+    rlgblg, # Belonging to particular religion or denomination
+    brncntr, # Born in country Y/N
+    facntr, # Father born in country Y/N
+    mocntr, # Mother born in country Y/N
        
      # location
     region, # region
@@ -107,7 +129,10 @@ ess_data <- ess_data |>
     lrscale, # left right political scale 
     polintr, # level of political interest
     clsprty, # Feel closer to a particular party than all other parties
+    
+    ## EU Attitudes
     euftf, # European Union: European unification go further or gone too far
+    vteubcmb, # Would vote for [country] to become member of European Union or remain outside
 
     
     # satisfaction with life and country

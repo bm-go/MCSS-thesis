@@ -1,8 +1,19 @@
 ---
-title: "Univariate analysis"
-author: "bmck"
-date: "2025-06-02"
-output: html_document
+title: "ESS data exploration and univariate analysis"
+author: "Bradley McKenzie"
+date: "June 2025"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+
 ---
 
 ```{r setup, include=FALSE}
@@ -13,10 +24,22 @@ knitr::opts_chunk$set(echo=T, knitr.purl.inline = FALSE)
 
 ## Purpose:
 
-This script will run the descriptive statistics for all of the trust variables within the ESS dataset. 
-This dataset can take some time to run as we apply weightings throughout and are looping over each wave and country of data. 
+This script will run the descriptive statistics for all of the trust variables within the ESS dataset. There are 7 trust variables that are being explored as potential targets in this analysis. This dataset can take some time to run as we apply weightings throughout and are looping over each wave and country of data. In the report, only the data on trust in the UK parliament and EU Parliament are used, but this script creates summary summary statistics, for all rounds and countries.
 
-When doing international comparisons, we primarily use unweighted data to make comparison faster, then use weighted data later for the final values. Weights are applied in all calculations for the UK only. 
+The plots area only made for select countries and variables of interest: 
+ - UK & Germany (study country + comparison for diff-in-diff)
+ - trust in UK Parliament, trust in EU parliament
+
+When doing the initial international comparisons, we primarily use unweighted data to make comparison faster, however weights are introduced later for the the final calculations. Weights are applied in all calculations for the UK only. 
+
+The order of this script is: 
+1. Call the `Dataframe creation_ESS` script to load ESS data with select key variables
+2. Explore the different weights & stratum in ESS - justifying the use of `anweight`.
+3. Create functions to create weighted trust values for all variables in all rounds in all countries. 
+4. Plot selected trends. 
+5. Create variables of extreme high/low trust in different values to monitor for trends (note, this is not used in the final report)
+6. Create functions to plot trust variables between the UK and other countries
+7. Conduct international comparisons to check for a country-level comparison to the UK
 
 First, run the data cleaning script over the ESS download. Run this first and link to your ESS file download. 
 
@@ -156,8 +179,6 @@ simple_summary_data |> filter(essround %in% c(9,10,11)) |>
 We see through these that our estimates are identical, but we do lose some precision in the variance of our estiamtes as flagged in the weighting documentation. 
 
 We will note this in our limitations but note it does not impact our point estimates.  
-
-
 
 ## Weighted univariate analysis for all trust variables:
 
