@@ -2,7 +2,17 @@
 title: "Difference-in-Difference"
 author: "Bradley McKenzie"
 date: "June 2025"
-output: html_document
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}

@@ -1,8 +1,18 @@
 ---
-title: "Bivariate analysis"
-author: "bmck"
-date: "2025-06-03"
-output: html_document
+title: "Bivariate analysis of ESS trust variables"
+author: "Bradley McKenzie"
+date: "June 2025"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
