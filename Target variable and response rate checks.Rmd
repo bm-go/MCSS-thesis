@@ -1,0 +1,346 @@
+---
+title: "Exploring target variable and response rates"
+author: "Bradley McKenzie"
+date: "June 2025"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Purpose
+
+Generate a plot of the weighted trends of people who have more support for EU, more support for UK or equal support over all available rounds. Check for not just trends but also polarisation if fewer people are beginning to have stronger views. 
+
+Call data from XXX  - we use the gb_clean data from the multivariate analysis sheet as this has all data from R1 to R11. 
+
+```{r}
+gb_clean
+```
+
+Now we want to create a varaible based on the difference in trust in the UK Parlaiment and trust in the EU Parliament. We don't care if this is +10 or +1. Just if there is even a difference of opinion. 
+
+```{r}
+target_explore <- ess_data |> 
+  filter(cntry == "GB") |> 
+  select(essround, anweight, trust_europ, trust_parliament) |> 
+  drop_na() |> # can't keep any missing values for these calculations. 
+  mutate(target_diff = trust_europ - trust_parliament,
+         # now conditional variable:
+         target_diff_cat = factor(case_when(target_diff > 0 ~ "Greater EU support",
+                                     target_diff == 0 ~ "Equal support",
+                                     target_diff < 0 ~ "Greater UK support"),
+                                     levels = c("Greater UK support", "Equal support", "Greater EU support"))
+  )
+target_explore |> plot_missing()
+target_explore
+```
+
+Calculate correlation over time - seems like biggest drop is around R10. 
+```{r}
+target_explore |> 
+  group_by(essround) |> 
+  summarise(correl = cor(trust_europ, trust_parliament))
+cor(target_explore$trust_europ, target_explore$trust_parliament)
+
+```
+
+# Plot distribution of the target
+
+```{r}
+target_explore <- target_explore |> 
+  mutate(trust_eu2 = ifelse(trust_europ == 0, 0.1, trust_europ),
+         trust_parl2 = ifelse(trust_parliament == 0, 0.1, trust_parliament),
+         target_ratiolog_unafj = log(trust_europ/trust_parliament),
+         target_ratiolog = log(trust_eu2/trust_parl2))
+```
+
+We have target_ratiolog to measure over time. We caluclate the weighted proportions for each value
+
+```{r}
+# Create a survey design object
+simple_design <- target_explore |> 
+  as_survey_design(ids = 1, weights = anweight)
+
+# then calculate the average score in each
+weighted_avg_targetratio <- svyby(~target_ratiolog, ~essround, simple_design, svymean, na.rm = TRUE, vartype = c("se", "ci")) |> 
+  mutate(target_interp = exp(target_ratiolog),
+         ci_l_interp = exp(ci_l),
+         ci_u_interp = exp(ci_u))
+
+weighted_avg_targetratio
+```
+
+Print the weighted geometric means of the data: 
+
+```{r}
+findings_to_print <- weighted_avg_targetratio |> 
+  select(essround, target_ratiolog, target_interp, ci_l_interp, ci_u_interp)
+broom::tidy(findings_to_print)
+
+gt::gt(findings_to_print)
+library(kableExtra)
+findings_to_print |> mutate_all(round,4) |> kable()
+```
+
+
+
+And boxplot of each value over time
+
+```{r}
+ggplot(target_explore, aes(x = factor(essround), y = target_ratiolog)) +
+  geom_boxplot(outlier.shape = NA) + # Hide outliers from boxplot if you prefer to show them with geom_jitter
+ # geom_jitter(aes(size = anweight), alpha = 0.3, width = 0.2, color = "blue") + # Plot individual points, sized by weight
+  geom_point(data = weighted_avg_targetratio, aes(x = factor(essround), y = target_ratiolog),
+             color = "red", shape = 24, size = 2, stroke = 1.2) + # Add weighted average as a red star
+  labs(
+    title = "Distribution of Log-Transformed Trust Ratios by ESS Round",
+    subtitle = "Red stars indicate the weighted arithmetic mean of the log-ratio.",
+    x = "ESS Round",
+    y = "Relative trust in EU/UK") +
+  theme_minimal()+
+  lims(y = c(-2.5,2.5))
+
+```
+
+Plot of just the exponentialised variable. 
+
+```{r}
+ggplot(weighted_avg_targetratio, 
+       aes(x = essround, y = target_interp)) +
+  geom_line() +
+  lims(y = c(0,2))+
+  scale_x_continuous(breaks = seq(1,11,1))+
+  geom_hline(yintercept =  1, colour = "red")+
+  labs(
+    title = "Distribution of Log-Transformed Trust Ratios by ESS Round",
+    subtitle = "Red stars indicate the weighted arithmetic mean of the log-ratio.",
+    x = "ESS Round",
+    y = "Average relative trust in EU/UK") +
+  theme_minimal()+
+  annotate(geom="text",
+           x = 3, y = 1.2, label = "Greater trust in EU parliament")+ # UK trust label
+  annotate(geom="text",
+           x = 3, y = 1.2, label = "Greater trust in UK parliament")+ # UK trust label
+  annotate(geom = "segment",
+    x = 5,                    # X-coordinate of the arrow's tail
+    y = 6,                    # Y-coordinate of the arrow's tail
+    xend = 5,                 # X-coordinate of the arrow's head (same as x for vertical)
+    yend = 7,                 # Y-coordinate of the arrow's head (higher than y for upward)
+    arrow = arrow(length = unit(0.3, "cm"), type = "closed"), # Define the arrow properties
+    color = "red",            # Color of the arrow
+    lwd = 1                   # Line width (thickness) of the arrow
+  )
+
+
+```
+
+
+
+
+Plot of simple difference:
+
+```{r}
+ggplot(target_explore, aes(x = factor(essround), y = target_diff)) +
+  geom_boxplot(outlier.shape = NA) + # Hide outliers from boxplot if you prefer to show them with geom_jitter
+ # geom_jitter(aes(size = anweight), alpha = 0.3, width = 0.2, color = "blue") + # Plot individual points, sized by weight
+  geom_point(data = weighted_avg_targetratio, aes(x = factor(essround), y = target_ratiolog),
+             color = "red", shape = 24, size = 2, stroke = 1.2) + # Add weighted average as a red star
+  labs(
+    title = "Distribution of Log-Transformed Trust Ratios by ESS Round",
+    subtitle = "Red stars indicate the weighted arithmetic mean of the log-ratio.",
+    x = "ESS Round",
+    y = "Relative trust in EU/UK") +
+  theme_minimal()+
+  lims(y = c(-2.5,2.5))
+```
+
+
+### Calculate weighted averages by round
+
+```{r}
+# Create a survey design object
+simple_design <- target_explore |> 
+  as_survey_design(ids = 1, weights = anweight)
+
+# Calculate weighted proportions of target_diff_cat for each essround
+weighted_targ_proportions <- simple_design |> 
+  group_by(essround, target_diff_cat) |>  # Group by both variables
+  summarise(
+    # Use survey_prop() to get the weighted proportion
+    proportion = survey_prop(vartype = c("se", "ci")), # Also get standard errors and confidence intervals
+    .groups = 'drop'
+  )
+
+# Check data
+weighted_targ_proportions
+
+# cehck each round is 100% proportion. 
+weighted_targ_proportions |> 
+  group_by(essround) |> summarise(totalobs = sum(proportion))
+```
+
+#### Plot the trends - FOR REPORT
+
+```{r}
+# stacked bar plots
+weighted_targ_proportions |> 
+  ggplot(aes(x=factor(essround), y = proportion, group = target_diff_cat, fill = target_diff_cat))+
+  geom_col()
+
+# line chart. 
+weighted_targ_proportions |> 
+  ggplot(aes(x=factor(essround), y = proportion, group = target_diff_cat, colour = target_diff_cat))+
+  geom_line()+
+  geom_point(size=2)+
+  # geom_errorbar(aes(ymin = proportion_low, ymax = proportion_upp),
+  #               width = 0.5, colour = "gray")+
+  theme_classic()+
+  labs(title = "Relative support for EU and UK Parliament's within UK",
+       subtitle = "ESS Rounds 1 to 11",
+       y = "Proportion of population",
+       x = "ESS Round",
+       colour = "More trusted Parliament")
+
+
+
+```
+
+It appears that the more people reported higher trust for the EU in 2022 than the national UK Government. 
+
+
+
+#### Response rates plot: 
+
+Here we manually impute the response rates from round 6 to 10 and then match against the number of responeses. The response numbers are taken from each rounds quality report on the ESS website. Pre-round 6 data not found but is reported in this paper: https://surveyinsights.org/?p=9673.
+
+The sampling during the COVID-19 period for rounds 10 and 11 in the regression models are important considerations. While weightings help balance data, the response rate for the UK dropped from 
+•	50.6% in Round 6
+•	43.6% in Round 7, 
+•	43.0% in Round 8 
+•	41.0% in Round 9
+•	20.9% in Round 10 
+•	All sourced from ESS quality reports for each round, Round 11 information not available yet. 
+•	While robustness testing can be conducted to understand those respond “don’t know” to the target variable.
+
+
+```{r}
+#count total responses. 
+total_responses <- gb_clean |> 
+  group_by(essround) |> summarise(total_responses = n())
+
+# summary of response rates 
+response_rates <- as_tibble(list(
+  essround = c(6, 7, 8, 9, 10, 11),
+  `Response rate` = c(0.506, 0.436, 0.430, 0.410, 0.209, NA)
+))
+
+# join together
+total_responses <- total_responses |> 
+  left_join(response_rates, by = join_by(essround))
+
+## plot the change: 
+total_responses |> 
+  ggplot()+
+  geom_line(aes(x=essround, y=total_responses))+
+  geom_line(aes(x=essround, y=`Response rate`))
+
+
+ggplot(total_responses, aes(x = essround)) +
+  geom_line(aes(y = total_responses), color = "blue") +
+  geom_line(aes(y = `Response rate`), linetype = "dotted", color = "red") +
+  scale_y_continuous(
+    name = "Total Responses",
+    sec.axis = sec_axis(~ . / max(`Response rate`, na.rm = TRUE), name = "Response Rate (0-1)")
+  ) + 
+  theme_minimal()
+
+ggplot(total_responses, aes(x = essround)) +
+  geom_line(aes(y = `Response rate` * 100), linetype = "dotted", color = "red") +  # Convert response rate to %
+  geom_line(aes(y = total_responses), color = "blue") +  # Second line for total responses
+  scale_y_continuous(
+    # Features of the first axis
+    name = "First Axis",
+    # Add a second axis and specify its features
+    sec.axis = sec_axis(trans=~./200, name="Second Axis")
+  ) +
+scale_y_continuous(
+    name = "Response Rate (%)",  # Left-hand y-axis label
+    sec.axis = sec_axis(~ . * (2000 / 100), name = "Total Responses")  # Right y-axis scaling
+  ) +
+  theme_minimal()
+
+
+
+total_responses |> 
+  pivot_longer(cols = c(`Response rate`, total_responses),
+               names_to = "Variable") |> 
+  mutate(essround = factor(essround)) |> 
+  ggplot(aes(x=essround, y = value, group = Variable))+
+  geom_line()
+```
+
+```{r}
+# Store variables for easy reference
+max_total <- max(total_responses$total_responses)
+max_rate <- max(total_responses$`Response rate`)
+
+# Calculate a scaling factor
+scale_factor <- max_total / max_rate
+
+# Plot
+total_responses |> 
+  ggplot(aes(x = factor(essround))) +
+  
+  # Total responses: Left axis (primary)
+  geom_col(aes(y = total_responses), fill = "skyblue", alpha = 0.7) +
+
+  # Response rate: Right axis (secondary), scaled
+  geom_line(aes(y = `Response rate`*2500), 
+            color = "darkred",
+            size = 1.2,
+            linetype = "dashed",
+            group = 1) +
+  
+  scale_y_continuous(
+    name = "Total Responses",
+    sec.axis = sec_axis(~ . / 2500, name = "Response Rate (Proportion)")
+  ) +
+  
+  labs(x = "ESS Round") +
+  theme_minimal() +
+  theme(
+    axis.title.y = element_text(color = "skyblue"),
+    axis.title.y.right = element_text(color = "darkred")
+  )
+```
+
+### Check NA responses 
+
+```{r}
+gb_clean |> 
+  mutate(na_eu = ifelse(is.na(trust_europ), 1,0),
+         na_uk_parl = ifelse(is.na(trust_parliament), 1,0)) |> 
+  group_by(essround) |> 
+  summarise(obs = n(),
+            total_euNA = sum(na_eu),
+            total_ukNA = sum(na_uk_parl),
+            pct_euNA = round(total_euNA/obs*100,2),
+            pct_ukNA = round(total_ukNA/obs*100,2))
+```
+
+
+
+
+
