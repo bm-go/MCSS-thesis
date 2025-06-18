@@ -23,10 +23,23 @@ knitr::opts_chunk$set(echo = TRUE)
 
 Generate a plot of the weighted trends of people who have more support for EU, more support for UK or equal support over all available rounds. Check for not just trends but also polarisation if fewer people are beginning to have stronger views. 
 
-Call data from XXX  - we use the gb_clean data from the multivariate analysis sheet as this has all data from R1 to R11. 
+### Call the underlying scripts to generate data:
 
-```{r}
-gb_clean
+Call data  - we use the gb_clean data and ess_data from the multivariate analysis sheet as this has all data from R1 to R11. 
+
+```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+knitr::purl("Multivariate analysis and var cleaning.Rmd", output = "temp_data_prep.R")
+source("temp_data_prep.R")
+file.remove("temp_data_prep.R")
+
+# clean our R environment from the extra files. 
+rm(convert_10pt_3pt, extreme_trust, # functions 
+   immig_vars,inc_edu_vars, missing50plus, polit_vars, satis_vars, # variable lists
+   cor_matrix, overall_avg, overall_avg_local, overall_eu_trust, overall_gb_trust, # hard coded values
+   all_trust_eu_summary, all_trust_local_summary, #multivar tables
+   gb_data_cleaning, 
+    # 
+   )
 ```
 
 Now we want to create a varaible based on the difference in trust in the UK Parlaiment and trust in the EU Parliament. We don't care if this is +10 or +1. Just if there is even a difference of opinion. 
@@ -211,7 +224,9 @@ weighted_targ_proportions |>
        subtitle = "ESS Rounds 1 to 11",
        y = "Proportion of population",
        x = "ESS Round",
-       colour = "More trusted Parliament")
+       colour = "More trusted Parliament")+
+    scale_y_continuous(labels = scales::percent)
+
 
 
 

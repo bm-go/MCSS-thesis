@@ -1,8 +1,15 @@
 ---
 title: "Regression modelling"
-author: "bmck"
-date: "2025-06-04"
-output: html_document
+author: "Bradley McKenzie"
+date: "June 2025"
+output:
+  html_document: 
+    theme: cerulean
+    highlight: tango
+    toc: yes
+    toc_float: true
+    toc_depth: 3
+    df_print: paged
 editor_options: 
   markdown: 
     wrap: 72
@@ -142,7 +149,7 @@ gb_clean_regress |> plot_missing()
 
 ```
 
-### Test target variables - raw diff and ratio
+### Test and plot the target variables - raw diff and ratio
 
 Create the 2 variables.
 
@@ -177,6 +184,53 @@ final_data_regress |>
 
 gb_clean |> group_by(essround) |> count()
 ess_data |> filter(cntry == "GB") |> group_by(essround) |> count()
+```
+
+Plot the non-transformed data next to the transformed data for the
+report:
+
+```{r}
+gb_clean_regress |> 
+  group_by(essround, target_ratio) |> 
+  summarise(obs = n()) |> 
+  ggplot(aes(x=target_ratio, y = obs, group = essround, colour = essround))+
+  geom_line()
+
+gb_clean_regress
+
+## Create density plots to compare
+## raw ratio
+p1 <- ggplot(gb_clean_regress, aes(x = target_ratio)) +
+  geom_density(fill = "skyblue", alpha = 0.7, adjust = 5) +
+  labs(
+    #title = "Distribution of unadjusted Trust Ratio",
+       x = "Raw trust ratio (Trust EU / Trust UK)",
+       y = "Density") +
+  theme_minimal()+
+  lims(x=c(0,50), y = c(0,0.7))
+
+## log target
+p2 <- ggplot(gb_clean_regress, aes(x = target_ratiolog)) +
+  geom_density(fill = "lightcoral", alpha = 0.7, adjust = 5) +
+  labs(
+    #title = "Distribution of Log-Transformed Trust Ratio",
+       x = "Log transformed ratio",
+      y = NULL
+       ) +
+  theme_minimal()+
+  lims(y = c(0,0.7))
+ #    theme(
+ #    axis.title.y = element_blank(), # Explicitly hide the axis title as well
+ #    axis.text.y = element_blank(),   # Optionally hide axis text/ticks if you want it even closer and don't need the scale on the right
+ # #   axis.ticks.y = element_blank(),
+ #    plot.margin = unit(c(0.2, 0.2, 0.2, 0.0), "cm") # Reduce left margin of p2
+ #  )
+
+
+# display:
+p1 + p2
+
+
 ```
 
 Check correlations for interpretations:
@@ -515,7 +569,7 @@ imputation_data <- gb_clean_regress |>
 
 # Running it with the default methods
 # By default: numerical variables -> pmm, binary factors -> logreg, > 2 levels factors -> polyreg
-imputed_data <- mice(imputation_data, m = 1, seed=1234)
+imputed_data <- mice(imputation_data, m = 5, seed=1234)
 
 # check the imputation method 
 summary(imputed_data)
