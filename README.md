@@ -32,6 +32,14 @@ Key links to download data:
 
     *A guide to run the diff-in-diff between the UK and Germany for the 'Trust in the EU Parliament' variable around the Brexit Referendum.*
 
+5.  `Regression analysis.Rmd`
+
+    *Script to setup and transform target variable, run regression models with 2 targets (raw difference + log(ratio difference). Includes imputation of missing data and lasso regularisation. Models are run with and without time interactions then results shared in various plots.*
+
+6.   *`Target variable and response rates.Rmd`*
+
+    Additional plots to show the target variable transformation and changing ESS response rates.
+
 Note: If reusing code from this repository, you are liable to perform your own checks on it's accuracy.
 
 If you want to run through all of the analysis. The timeline below provides approximations on how the ESS fieldwork rounds line up with calendar year and against other political events in the UK and Germany. This is used to contextualise the for the difference-in-difference and regression models. Note that fieldwork times vary, but the ESS is run every second year with fieldwork times approximated to occur mostly between September of one year and finish in January of the following year.
