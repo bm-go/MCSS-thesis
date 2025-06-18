@@ -1,12 +1,12 @@
 # Modelling changing parliamentary trust in the UK within the European Social Survey (ESS)
 
-### Underlying analysis code for my Master in Computational Social Sciences thesis
+### Underlying code for Master in Computational Social Sciences thesis
 
 ### UC3M - 2024/25
 
 This repository contains the scripts and some direct model outputs from my Trabajo Fin de Máster (TFM). The final paper is available on request. However, the data cleaning, analysis and modelling have all been made available to assist others using ESS data.
 
-Users should be able to download each script and run through the code on their own. Before running any scripts, you must download ESS data. I recommend manually downloading through the ESS data wizard. The *essurvey* R package is no longer maintained and not functional.
+Users should be able to download each script and run through the code on their own. Before running any scripts, you must download ESS datafile and save it within a "Data" folder in the R project. I recommend manually downloading through the ESS data wizard. The *essurvey* R package is no longer maintained and not functional.
 
 Key links to download data:
 
@@ -14,7 +14,7 @@ Key links to download data:
 
 -   Or, [search through the full questionnaires](https://www.europeansocialsurvey.org/methodology/ess-methodology/source-questionnaire){.uri} for each round.
 
-[This repository contains 5 scripts, as follows:]{.underline}
+[This repository contains 6 scripts, as follows:]{.underline}
 
 1.  `Dataframe creation_ESS.Rmd`
 
@@ -36,9 +36,17 @@ Key links to download data:
 
     *Script to setup and transform target variable, run regression models with 2 targets (raw difference + log(ratio difference). Includes imputation of missing data and lasso regularisation. Models are run with and without time interactions then results shared in various plots.*
 
-6.   *`Target variable and response rates.Rmd`*
+6.  *`Target variable and response rates.Rmd`*
 
-    Additional plots to show the target variable transformation and changing ESS response rates.
+    *This models the transformation of the trust ratio and looks at decreasing UK response rates over time. It is explanatory only to explore models validity.*
+
+Each script is connected as they call one another. To run any script, ensure you load your ESS data in the "Data" folder, then run run your selected code.
+
+Additionally:
+
+-   The *'Outputs'* folder contains excel sheets of regression models outputs by target variable.
+
+-   The *'Script outputs (html)'* folder contains all html outputs from the Rmd files. These can be referred to to see outputs and plots as well.
 
 Note: If reusing code from this repository, you are liable to perform your own checks on it's accuracy.
 
@@ -46,4 +54,4 @@ If you want to run through all of the analysis. The timeline below provides appr
 
 **Figure.** Outline of ESS fieldwork rounds, analysis periods and significant events
 
-![](Analysis timeline screenshot.png)
+![](Analysis%20timeline%20screenshot.png)

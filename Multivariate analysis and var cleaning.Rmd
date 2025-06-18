@@ -892,8 +892,7 @@ cor(overall_demog_trust$mean.eu,
 We see a strong positive correlation. This trend is biased as it's all trained on the same data and not independent groups. But it does show that the demographic groups generally have positive correlations with trust in UK and EU. This supports the findings of (Harteveld et al. 2013) that found EU trust is driven by local government trust. 
 
 
-### Create joint data table - all values. 
-
+### Create joint data table - all values.
 Plot with negative values for UK to show the group's values next to each other:
 
 ```{r}

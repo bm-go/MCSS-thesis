@@ -1255,7 +1255,7 @@ Uncomment if you want to save xlsx outputs.
 
 ```
 
-## Additional testing 
+## Additional testing
 
 The analysis from here is additional and not included in any reports or
 findings.
