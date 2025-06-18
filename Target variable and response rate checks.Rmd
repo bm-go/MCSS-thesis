@@ -17,7 +17,9 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow") 
 ```
+
 
 ## Purpose
 
@@ -25,24 +27,22 @@ Generate a plot of the weighted trends of people who have more support for EU, m
 
 ### Call the underlying scripts to generate data:
 
-Call data  - we use the gb_clean data and ess_data from the multivariate analysis sheet as this has all data from R1 to R11. 
+Call data  - we use the ess raw data set as it's much faster to call our data creation and we don't need demorgaphic information in this code.  
 
 ```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
-knitr::purl("Multivariate analysis and var cleaning.Rmd", output = "temp_data_prep.R")
+knitr::purl("Dataframe creation_ESS.Rmd", output = "temp_data_prep.R")
 source("temp_data_prep.R")
 file.remove("temp_data_prep.R")
-
-# clean our R environment from the extra files. 
-rm(convert_10pt_3pt, extreme_trust, # functions 
-   immig_vars,inc_edu_vars, missing50plus, polit_vars, satis_vars, # variable lists
-   cor_matrix, overall_avg, overall_avg_local, overall_eu_trust, overall_gb_trust, # hard coded values
-   all_trust_eu_summary, all_trust_local_summary, #multivar tables
-   gb_data_cleaning, 
-    # 
-   )
 ```
 
-Now we want to create a varaible based on the difference in trust in the UK Parlaiment and trust in the EU Parliament. We don't care if this is +10 or +1. Just if there is even a difference of opinion. 
+Additional libraries:
+```{r}
+library(DataExplorer)
+library(survey)
+library(srvyr)
+```
+
+Now we want to create a variable based on the difference in trust in the UK Parliament and trust in the EU Parliament. We don't care if this is +10 or +1. Just if there is even a difference of opinion. 
 
 ```{r}
 target_explore <- ess_data |> 
@@ -69,7 +69,7 @@ cor(target_explore$trust_europ, target_explore$trust_parliament)
 
 ```
 
-# Plot distribution of the target
+## Plot distribution of the target
 
 ```{r}
 target_explore <- target_explore |> 
@@ -106,7 +106,6 @@ gt::gt(findings_to_print)
 library(kableExtra)
 findings_to_print |> mutate_all(round,4) |> kable()
 ```
-
 
 
 And boxplot of each value over time
@@ -204,7 +203,7 @@ weighted_targ_proportions |>
   group_by(essround) |> summarise(totalobs = sum(proportion))
 ```
 
-#### Plot the trends - FOR REPORT
+## Plot the trends - for report
 
 ```{r}
 # stacked bar plots
@@ -236,7 +235,7 @@ It appears that the more people reported higher trust for the EU in 2022 than th
 
 
 
-#### Response rates plot: 
+## Response rates plot
 
 Here we manually impute the response rates from round 6 to 10 and then match against the number of responeses. The response numbers are taken from each rounds quality report on the ESS website. Pre-round 6 data not found but is reported in this paper: https://surveyinsights.org/?p=9673.
 
@@ -249,57 +248,44 @@ The sampling during the COVID-19 period for rounds 10 and 11 in the regression m
 •	All sourced from ESS quality reports for each round, Round 11 information not available yet. 
 •	While robustness testing can be conducted to understand those respond “don’t know” to the target variable.
 
+Add in summary table to use:
+
+```{r}
+gb_rr_testing <- ess_data |> 
+  filter(cntry == "GB",
+         essround >5) |> 
+  select(
+    essround,
+    cntry,
+    #trust_people = ppltrst, 
+    trust_europ,
+    trust_parliament)
+```
+
+
 
 ```{r}
 #count total responses. 
-total_responses <- gb_clean |> 
+total_responses <- gb_rr_testing |> 
   group_by(essround) |> summarise(total_responses = n())
 
 # summary of response rates 
 response_rates <- as_tibble(list(
   essround = c(6, 7, 8, 9, 10, 11),
-  `Response rate` = c(0.506, 0.436, 0.430, 0.410, 0.209, NA)
+  resp_rate = c(0.506, 0.436, 0.430, 0.410, 0.209, NA)
 ))
 
 # join together
 total_responses <- total_responses |> 
   left_join(response_rates, by = join_by(essround))
 
-## plot the change: 
+```
+
+Tranform dataset longer:
+
+```{r}
 total_responses |> 
-  ggplot()+
-  geom_line(aes(x=essround, y=total_responses))+
-  geom_line(aes(x=essround, y=`Response rate`))
-
-
-ggplot(total_responses, aes(x = essround)) +
-  geom_line(aes(y = total_responses), color = "blue") +
-  geom_line(aes(y = `Response rate`), linetype = "dotted", color = "red") +
-  scale_y_continuous(
-    name = "Total Responses",
-    sec.axis = sec_axis(~ . / max(`Response rate`, na.rm = TRUE), name = "Response Rate (0-1)")
-  ) + 
-  theme_minimal()
-
-ggplot(total_responses, aes(x = essround)) +
-  geom_line(aes(y = `Response rate` * 100), linetype = "dotted", color = "red") +  # Convert response rate to %
-  geom_line(aes(y = total_responses), color = "blue") +  # Second line for total responses
-  scale_y_continuous(
-    # Features of the first axis
-    name = "First Axis",
-    # Add a second axis and specify its features
-    sec.axis = sec_axis(trans=~./200, name="Second Axis")
-  ) +
-scale_y_continuous(
-    name = "Response Rate (%)",  # Left-hand y-axis label
-    sec.axis = sec_axis(~ . * (2000 / 100), name = "Total Responses")  # Right y-axis scaling
-  ) +
-  theme_minimal()
-
-
-
-total_responses |> 
-  pivot_longer(cols = c(`Response rate`, total_responses),
+  pivot_longer(cols = c(resp_rate, total_responses),
                names_to = "Variable") |> 
   mutate(essround = factor(essround)) |> 
   ggplot(aes(x=essround, y = value, group = Variable))+
@@ -309,7 +295,7 @@ total_responses |>
 ```{r}
 # Store variables for easy reference
 max_total <- max(total_responses$total_responses)
-max_rate <- max(total_responses$`Response rate`)
+max_rate <- max(total_responses$resp_rate)
 
 # Calculate a scaling factor
 scale_factor <- max_total / max_rate
@@ -322,7 +308,7 @@ total_responses |>
   geom_col(aes(y = total_responses), fill = "skyblue", alpha = 0.7) +
 
   # Response rate: Right axis (secondary), scaled
-  geom_line(aes(y = `Response rate`*2500), 
+  geom_line(aes(y = resp_rate*2500), 
             color = "darkred",
             size = 1.2,
             linetype = "dashed",
@@ -344,7 +330,7 @@ total_responses |>
 ### Check NA responses 
 
 ```{r}
-gb_clean |> 
+gb_rr_testing |> 
   mutate(na_eu = ifelse(is.na(trust_europ), 1,0),
          na_uk_parl = ifelse(is.na(trust_parliament), 1,0)) |> 
   group_by(essround) |> 
