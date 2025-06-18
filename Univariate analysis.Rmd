@@ -16,7 +16,7 @@ editor_options:
 
 ---
 
-```{r setup, include=FALSE}
+```{r setup2, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(echo=T, knitr.purl.inline = FALSE)
 
@@ -26,12 +26,6 @@ knitr::opts_chunk$set(echo=T, knitr.purl.inline = FALSE)
 
 This script will run the descriptive statistics for all of the trust variables within the ESS dataset. There are 7 trust variables that are being explored as potential targets in this analysis. This dataset can take some time to run as we apply weightings throughout and are looping over each wave and country of data. In the report, only the data on trust in the UK parliament and EU Parliament are used, but this script creates summary summary statistics, for all rounds and countries.
 
-The plots area only made for select countries and variables of interest: 
- - UK & Germany (study country + comparison for diff-in-diff)
- - trust in UK Parliament, trust in EU parliament
-
-When doing the initial international comparisons, we primarily use unweighted data to make comparison faster, however weights are introduced later for the the final calculations. Weights are applied in all calculations for the UK only. 
-
 The order of this script is: 
 1. Call the `Dataframe creation_ESS` script to load ESS data with select key variables
 2. Explore the different weights & stratum in ESS - justifying the use of `anweight`.
@@ -40,6 +34,13 @@ The order of this script is:
 5. Create variables of extreme high/low trust in different values to monitor for trends (note, this is not used in the final report)
 6. Create functions to plot trust variables between the UK and other countries
 7. Conduct international comparisons to check for a country-level comparison to the UK
+
+_Notes:_
+In some of the international comparisons, unweighted data are used to make comparison faster, however weights are introduced later for the the final calculations. Weights are applied in all calculations for the UK only. 
+
+The plots area only made for select countries and variables of interest: 
+ - UK & Germany (study country + comparison for diff-in-diff)
+ - trust in UK Parliament, trust in EU parliament
 
 First, run the data cleaning script over the ESS download. Run this first and link to your ESS file download. 
 
@@ -180,7 +181,7 @@ We see through these that our estimates are identical, but we do lose some preci
 
 We will note this in our limitations but note it does not impact our point estimates.  
 
-## Weighted univariate analysis for all trust variables:
+## Weighted univariate analysis for all trust variables
 
 Here, we create the average score for all trust variables for all years and countries with confidence intervals, then join the data together.
 
@@ -256,7 +257,7 @@ trust_summaries_df <- trust_summaries_df |>
 ```
 
 
-### Now plot all UK trends first
+### Plot of all UK trust trends
 
 First create a data subset, this will be used later to compare vs other countries too 
 
@@ -264,7 +265,6 @@ First create a data subset, this will be used later to compare vs other countrie
 gb_trust_summaries <- trust_summaries_df |> filter(cntry == "GB")
 
 ```
-
 
 And plot - all trends for UK: 
 
@@ -345,7 +345,7 @@ ess_data <- ess_data |>
 
 We keep R1 of political parties as we can't remove just the one variable. 
 
-## Investigating polarised values of trust
+## Investigating trends in polarised (extreme) trust scores
 
 Create variables for very high trust and very low trust, we will group as: 
 0,1,2,3: "Low trust"
@@ -550,7 +550,7 @@ gb_polarise_trust |>
   theme_minimal()
 ```
 
-#### Comparing local and european parliament trust:
+## Comparing local and european parliament trust (in the UK)
 
 ```{r}
 # Create the line chart with error bars
@@ -594,7 +594,7 @@ ggplot(aes(x = essround, y = wt_avg_mean,
 ```
 
 
-### International comparisons: 
+## International comparisons: 
 
 ```{r}
 trust_summaries_df |> 
@@ -616,7 +616,7 @@ trust_summaries_df |>
 ```
 
 
-#### Comparing individual countries
+### Comparing individual countries
 
 Matching in ESS_trust_w678.Rmd. The section is just for visual inspections. 
 
@@ -721,12 +721,8 @@ plot_gb_other_parliament <- function(trust_summaries_df=trust_summaries_df, othe
 plot_gb_other_parliament(trust_summaries_df, "DE")
 ```
 
-```{r}
 
-```
-
-
-Test plot:
+Test plot, UK vs Germany
 
 ```{r}
 trust_summaries_df |> 
@@ -826,7 +822,8 @@ ggplot(aes(x = essround, y = wt_avg_mean,
   )
 ```
 
-### UK vs Germany with standardised values to R1
+Secondarily, a standardised plot set to R1 values. 
+
 ```{r}
 ### plotting just the pre-Referendum periods 
 trust_summaries_df |> 
@@ -890,10 +887,9 @@ ggplot(aes(x = essround, y = wt_avg_mean,
 ```
 
 
-### Other country comparisons 
+### Other country comparisons - create plot function
 
-
-Now turn to function to compare other countries 
+Now turn the plot to a function to quickly compare all other countries. 
 
 ```{r}
 plot_gb_other_parliament <- function(trust_summaries_df=trust_summaries_df, other_country){
@@ -1032,13 +1028,11 @@ ess_data |>
 ```
 
 
-## Create summaries of trust in europe variables for all countries in each round. 
+## Compare EU trust for all European countries in each round. 
 
 Here we calculate the mean values of trust in each of the trust variables
 
-### Plot the individual trends 
-
-Create summary data:
+### Create summary data:
 
 ```{r}
 
@@ -1056,7 +1050,7 @@ simple_summary_data <- svyby(
 
 And plot the trend over time with error bars for each year:
 
-### Updated Code for Line Chart with Error Bars
+### And plot altogether each country:
 
 Here's the updated ggplot code for trust in people. 
 
@@ -1082,5 +1076,3 @@ ggplot(simple_summary_data,
   )
 ```
 
-
-Trust in politics
