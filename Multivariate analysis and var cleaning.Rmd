@@ -15,8 +15,9 @@ editor_options:
     wrap: 72
 ---
 
-```{r setup, include=FALSE}
+```{r setup3, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
 ```
 
 ## Purpose
@@ -38,8 +39,7 @@ The following will call the data file from "Univariate analysis.Rmd" file. This 
 
 - ess_data -> Our original dataset with some minor cleaning and additional variables for high/low trust included. 
 
-```{r load-data-silently, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
-#knitr::purl("Dataframe creation_ESS.Rmd", output = "temp_data_prep.R")
+```{r load-data-silently2, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 knitr::purl("Univariate analysis.Rmd", output = "temp_data_prep2.R")
 source("temp_data_prep2.R")
 file.remove("temp_data_prep2.R")
@@ -63,12 +63,13 @@ rm(ess_data_r9_r11,
    trust_hilow_summaries_df,
    trust_hilow_summaries_df2
    )
+
 ```
 
 
 ### Libraries
 
-```{r}
+```{r libs2}
 library(DataExplorer)
 library(survey)
 library(purrr)
@@ -87,7 +88,7 @@ We also look to focus on variables after R5 as this will be our focus for the mo
 
 Check sociodemographic variables:
 
-```{r}
+```{r, warning = FALSE}
 gb_data_cleaning <- ess_data |> 
   filter(cntry == "GB",
          essround > 5)
@@ -130,6 +131,8 @@ gb_data_cleaning |>
 
 We do not remove these variables as many are available from R8. So they will not be included in the DiD but may be useful for the regression and identifying trends. 
 
+### Test variable groups for multicollinearity & missingness
+
 #### Political variables 
 
 ```{r}
@@ -170,7 +173,7 @@ corrplot(cor_matrix, method = "color", type = "upper",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
 
-### income and education
+#### Income and education
 
 ```{r}
 # identify vars
@@ -245,7 +248,6 @@ satis_vars <- c(
 ```
 
 
-
 ## Immigration variables:
 
 ```{r}
@@ -278,7 +280,8 @@ ess_data |>
 
 ```
 
-Quite high correlations, we see that there are many 5/10 responses here. Large modal value. This is likely people not wanting to appear racist. 
+Quite high correlations, we see that there are many 5/10 responses here. Large modal value. This may be people not wanting to appear xenophobic and hiding their true views.
+
 We will continue with "imwbcnt" - Immigrants make country worse or better place to live. 
 We will group this as yes, no, moderate but not focus on extremes. This will be hard to exploit as many people appear to be hiding their true value.  
 
@@ -292,7 +295,6 @@ immig_vars <- "imwbcnt"
 ```{r}
 names(ess_data)
 ```
-
 
 ### Select our final demographic variables to calculate conditional means. 
 
@@ -399,9 +401,9 @@ ess_clean |>
 
 ```
 
-### Clean varibles for modelling. 
+## Recode varibles for modelling. 
 
-## to clean variables:
+#### List of variables cleaned and how
 
 agea - to standard age groups 
 eisced - combine to fewer groups. 
@@ -422,6 +424,7 @@ nwspol - DROPPED due to data quality issue frmom above.  political_news time per
 atchctr - convert to 3pt categorical 
 post political online - keep as binary but relevel to "yes" and "no'
 
+#### 10 point likert to 3pt scale recode function
 1. Create function to tidy all 10pt scale variables (into 3pt scales) 
 
 ```{r}
@@ -439,6 +442,8 @@ convert_10pt_3pt <- function(var_10pt) {
 
 
 ```
+
+#### Recoding, releveling, factorising.
 
 First, convert all to factor, this will give us the text labels too. 
 
@@ -560,7 +565,9 @@ gb_clean <- ess_clean |>
 ```
 
 
-## Create weighted conditional means. 
+## Multivariate data exploration and plots:
+
+### Create weighted conditional means for EU trust.
 
 Now we calculate all of the means within groups - this is our actual bivariate analysis. 
 
@@ -629,6 +636,8 @@ overall_avg <- overall_eu_trust$mean_trust[1]
 overall_avg
 ```
 
+#### Plot conditional means for EU trust (ordered by value)
+
 Now plot with the confidence intervals  
 
 ```{r}
@@ -655,6 +664,8 @@ all_trust_eu_summary |>
 
 
 ```
+
+#### Plot conditional means for EU trust (grouped by variable)
 
 Now grouped by the actual demographic variables too: 
 ```{r}
@@ -684,6 +695,9 @@ all_trust_eu_summary |>
 
 
 ```
+
+#### Calculate and plot standardised conditional means for EU trust (ordered by value)
+
 We calculate the standardised data. We exclude region as they are not granular enough and the data appears to disagree with estimates of the Brexit vote, where in this data, London has the highest levels of EU trust. 
 
 ```{r}
@@ -785,6 +799,8 @@ overall_avg_local <- overall_gb_trust$mean_trust[1]
 overall_avg_local
 ```
 
+#### Plot conditional means for UK trust (ordered by value)
+
 Plot the values for local parliament: 
 
 ```{r}
@@ -811,6 +827,8 @@ ggplot(all_trust_local_summary,
 
 
 ```
+
+#### Plot conditional means for UK trust (grouped by variable)
 
 And unordered data, grouped by variable:
 
@@ -839,7 +857,7 @@ ggplot(all_trust_local_summary,
 ```
 
 
-### Join data together: 
+### Join EU and UK conditional means data together: 
 
 Combine data for euro and local parliament trust. 
 
@@ -868,43 +886,13 @@ overall_demog_trust |>
 
 cor(overall_demog_trust$mean.eu,
                  overall_demog_trust$mean.uk)
-cor(plot_data$std.eu,
-                 plot_data$std.uk)
 
 ```
 
 We see a strong positive correlation. This trend is biased as it's all trained on the same data and not independent groups. But it does show that the demographic groups generally have positive correlations with trust in UK and EU. This supports the findings of (Harteveld et al. 2013) that found EU trust is driven by local government trust. 
 
-Plot both together: 
 
-```{r}
-ggplot(overall_demog_trust) +
-  geom_point(aes(x = mean.eu,
-                 y = fct_reorder(level, mean.eu),
-                 size = 2, colour = "steelblue")) +
-  geom_errorbarh(aes(xmin = ci_low.eu, 
-                     xmax = ci_high.eu),
-                 height = 0, colour = "gray50") +
-  geom_point(aes(x = mean.uk,
-                 y = fct_reorder(level, mean.uk), 
-                 size = 2, colour = "orange")) +
-  geom_errorbarh(aes(xmin = ci_low.uk, 
-                     xmax = ci_high.uk),
-                 height = 0, colour = "gray50") +
-  #facet_grid(demog_var~., scales = "free_y", space = "free_y") +
-  labs(
-    x = "Weighted mean of Trust in EU/UK Parliament",
-    y = NULL,
-    title = "Conditional Mean of Trust in EU/UK Parliament",
-    subtitle = "Point estimates ± 95% CI"
-  ) +
-  theme_minimal() +
-  theme(strip.text.y = element_text(angle = 0, face = "bold"),
-        axis.text.y  = element_text(size = 10),
-        panel.spacing.y = unit(0.5, "lines")
-  )
-  
-```
+### Create joint data table - all values. 
 
 Plot with negative values for UK to show the group's values next to each other:
 
@@ -920,6 +908,8 @@ plot_data <- overall_demog_trust |>
          std.eu_cihigh = ci_high.eu-overall_avg)
 
 ```
+
+#### Plot joint true values 
 
 ```{r}
 
@@ -953,6 +943,8 @@ ggplot(plot_data) +
   scale_y_discrete(expand = expansion(add = c(1, 1)),
                    position = "left")
 ```
+
+#### Plot joint standardised values
 
 Standardised trends for trust in UK and EU Parliament by demographic gorup  
 
@@ -1023,6 +1015,9 @@ ggplot(plot_data) +
   geom_vline(xintercept = 0)
 
 ```
+
+#### Plot a subset (for body of report)
+
 Plot a subset for report: 
 
 ```{r}
@@ -1069,21 +1064,21 @@ plot_data |> filter(demog_var %in% c("age_rec", "country_attach", "econ_sat", "i
 
 ```
 
-
+#### Print values for report (if required)
 
 Plot as table using stargazer 
 
 ```{r}
-summary_plot_data <- plot_data |> 
-  select(demog_var, level, mean.eu, se.eu, mean.uk, se.uk)
-
-stargazer(summary_plot_data,
-          type = "text",  # Use "latex" or "html" for different formats
-          summary = FALSE, # Prevent summary statistics
-          rownames = FALSE, # Remove row numbers
-          title = "Summary Table",
-          column.labels = c("Demographic Variable", "Level", "Mean EU", "SE EU", "Mean UK", "SE UK"),
-          align = TRUE)
+# summary_plot_data <- plot_data |> 
+#   select(demog_var, level, mean.eu, se.eu, mean.uk, se.uk)
+# 
+# stargazer(summary_plot_data,
+#           type = "text",  # Use "latex" or "html" for different formats
+#           summary = FALSE, # Prevent summary statistics
+#           rownames = FALSE, # Remove row numbers
+#           title = "Summary Table",
+#           column.labels = c("Demographic Variable", "Level", "Mean EU", "SE EU", "Mean UK", "SE UK"),
+#           align = TRUE)
 ```
 
 
