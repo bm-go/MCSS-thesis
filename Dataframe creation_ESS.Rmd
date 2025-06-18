@@ -33,7 +33,7 @@ This is a simple script performing the following:
 
 ## Read in libraries
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 library(haven)
 library(tidyverse)
 library(here)
@@ -47,9 +47,11 @@ conflict_prefer("filter", "dplyr")
 conflict_prefer("select", "dplyr")
 ```
 
-### Read complete dataset
+## Read complete dataset
 
-Read the dataset (my one has most repeated variables for waves 1 to 11) for all available countries
+Read the dataset (my one has most repeated variables for waves 1 to 11) for all available countries.
+
+This is the most important step - download your ESS datafile and load it into the "Data" folder of your R project. 
 
 ```{r}
 #ess_data <- haven::read_sav(here("Data/ESS_3.0_june_update/ESS_datafile_3.0.sav"))
@@ -62,7 +64,7 @@ glue("We have an ESS dataset with {nrow(ess_data)} rows and {ncol(ess_data)} var
 ```
 
 
-#### Filter variables
+### Select variables of interest
 
 Create summary data with our IDs, weights, demographics, trust variables and other attitudinal information. 
 
@@ -106,10 +108,10 @@ ess_data <- ess_data |>
     brncntr,  #Respondent born in the UK
     blgetmg, # Belong to minority ethnic group in country
     feethngr, # Feel part of same race or ethnic group as most people in country
-    rlgblg, # Belonging to particular religion or denomination
+    #rlgblg, # Belonging to particular religion or denomination
     brncntr, # Born in country Y/N
-    facntr, # Father born in country Y/N
-    mocntr, # Mother born in country Y/N
+    #facntr, # Father born in country Y/N
+    #mocntr, # Mother born in country Y/N
        
      # location
     region, # region
@@ -132,7 +134,7 @@ ess_data <- ess_data |>
     
     ## EU Attitudes
     euftf, # European Union: European unification go further or gone too far
-    vteubcmb, # Would vote for [country] to become member of European Union or remain outside
+    #vteubcmb, # Would vote for [country] to become member of European Union or remain outside
 
     
     # satisfaction with life and country
@@ -174,7 +176,7 @@ ess_data <- ess_data |>
 
 Some variables ESS does not have that would be helpful include social class and mental health scores. 
 
-### show descriptives on responses of the data:
+### Show descriptives on responses of the data:
 
 ```{r}
 ess_data |> 
@@ -184,8 +186,6 @@ ess_data |>
               values_from = n)
 
 ```
-
-### Impute missing analysis weight variable
 
 ### Create survey object to include weights
 
@@ -256,7 +256,7 @@ for (i in 1:nrow(data_by_country)) {
 rm(current_group)
 ```
 
-##### (ii) Responses by ESS round: 
+#### (ii) Responses by ESS round: 
 
 ```{r}
 # Calculate grouped stats by round
