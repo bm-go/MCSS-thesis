@@ -17,6 +17,7 @@ editor_options:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+options(knitr.duplicate.label = "allow")
 ```
 
 ## Purpose
@@ -28,7 +29,7 @@ It will run a naive DiD model which is just the weighted averages for
 
 This script is based on DiD code from a course within our Master in Computational Social Sciences taught by Patrick Kraft. 
 
-### Call exisitng scripts to get data and code. 
+## Call existing scripts to get data and code. 
 
 First we call the exisitng models so we have our cleaned dataset. This is the nested process from these scripts: 
   - Dataframe creation_ESS.Rmd -> load data 
@@ -47,8 +48,7 @@ rm(convert_10pt_3pt, extreme_trust, # functions
    immig_vars,inc_edu_vars, missing50plus, polit_vars, satis_vars, # variable lists
    cor_matrix, overall_avg, overall_avg_local, overall_eu_trust, overall_gb_trust, # hard coded values
    all_trust_eu_summary, all_trust_local_summary, #multivar tables
-   gb_data_cleaning, 
-    # 
+   gb_data_cleaning
    )
 ```
 
@@ -76,7 +76,7 @@ library(modelsummary)
 
 This recreates the plots from "Univariate analysis.Rmd" to show the parallel trends assumption is satisfied:
 
-##### The pre-Referndum period 
+##### The pre-Referendum period 
 
 ```{r}
 ### plotting just the pre-Referendum periods 
@@ -183,15 +183,6 @@ ggplot(aes(x = essround, y = wt_avg_mean,
         panel.grid.minor.x = element_blank(),
         panel.grid.minor.y = element_blank()
   )
-
-```
-
-
-#### Compare via matching algorithm. 
-
-With Euclidian matching, it also finds that Germany is the best comparison group. When matched on data from R1 to R7 (pre-Referendum):
-
-```{r}
 
 ```
 
@@ -390,14 +381,14 @@ summary(m_r8_gaus)
 
 ```
 
-```{r}
-cor_matrix <- cor(simple_design_w7w8$variables,
-                  use = "pairwise.complete.obs")
-
-corrplot(cor_matrix, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
-         col = colorRampPalette(c("blue", "white", "red"))(200))
-
+```{r, include=FALSE}
+# cor_matrix <- cor(simple_design_w7w8$variables,
+#                   use = "pairwise.complete.obs")
+# 
+# corrplot(cor_matrix, method = "color", type = "upper", 
+#          addCoef.col = "black", tl.col = "black",
+#          col = colorRampPalette(c("blue", "white", "red"))(200))
+# 
 ```
 
 
@@ -426,13 +417,6 @@ m_w7w8_weighted_did_covars <- svyglm(
 )
 
 summary(m_w7w8_weighted_did_covars)
-corrplot()
 ```
 We see the interaction term is still not significant in estimating trust in europe. 
-
-### Robustness check - against period t-1 (R6)
-
-```{r}
-
-```
 
