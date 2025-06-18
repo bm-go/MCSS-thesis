@@ -1,8 +1,12 @@
 # Modelling changing parliamentary trust in the UK within the European Social Survey (ESS)
 
-### Underlying code for Master in Computational Social Sciences thesis
+### Underlying code for thesis analysis 
 
-### UC3M - 2024/25
+### UC3M - Master in Computational Social Sciences  - 2024/25
+
+------------------------------------------------------------------------
+
+### Background
 
 This repository contains the scripts and some direct model outputs from my Trabajo Fin de Máster (TFM). The final paper is available on request. However, the data cleaning, analysis and modelling have all been made available to assist others using ESS data.
 
@@ -14,7 +18,11 @@ Key links to download data:
 
 -   Or, [search through the full questionnaires](https://www.europeansocialsurvey.org/methodology/ess-methodology/source-questionnaire){.uri} for each round.
 
-[This repository contains 6 scripts, as follows:]{.underline}
+------------------------------------------------------------------------
+
+### Structure of this repository
+
+This repository contains 6 scripts, as follows:
 
 1.  `Dataframe creation_ESS.Rmd`
 
@@ -48,10 +56,14 @@ Additionally:
 
 -   The *'Script outputs (html)'* folder contains all html outputs from the Rmd files. These can be referred to to see outputs and plots as well.
 
-Note: If reusing code from this repository, you are liable to perform your own checks on it's accuracy.
+------------------------------------------------------------------------
+
+### Additional context for the analysis into UK/EU trust: 
 
 If you want to run through all of the analysis. The timeline below provides approximations on how the ESS fieldwork rounds line up with calendar year and against other political events in the UK and Germany. This is used to contextualise the for the difference-in-difference and regression models. Note that fieldwork times vary, but the ESS is run every second year with fieldwork times approximated to occur mostly between September of one year and finish in January of the following year.
 
 **Figure.** Outline of ESS fieldwork rounds, analysis periods and significant events
 
-![](Analysis%20timeline%20screenshot.png)
+![](Analysis%20timeline%20screenshot.png){width="748"}
+
+**Note: If reusing code from this repository, you are liable to perform your own checks on model output and accuracy**
