@@ -64,6 +64,6 @@ If you want to run through all of the analysis. The timeline below provides appr
 
 **Figure.** Outline of ESS fieldwork rounds, analysis periods and significant events
 
-![](images/Analysis timeline screenshot.png){width="724"}
+![](images/Analysis timeline screenshot.png)
 
 **Note: If reusing code from this repository, you are liable to perform your own checks on model output and accuracy**
